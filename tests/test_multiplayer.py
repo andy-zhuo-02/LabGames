@@ -236,18 +236,78 @@ class RoomTests(unittest.TestCase):
             self.registry.perform("friend", "room/start", payload)
         self.assertEqual(room.game.table.hand_number, 1)
 
-    def test_ready_can_be_cancelled_and_membership_change_clears_votes(self):
+    def test_ready_can_be_cancelled_and_new_members_do_not_interrupt_votes(self):
         self.join("friend")
         self.command("host", "room/start")
         self.command("host", "room/start", ready=False)
         self.command("friend", "room/start")
         self.assertEqual(self.registry.snapshot("host")["phase"], "waiting")
         self.assertEqual(self.registry.snapshot("host")["room_info"]["ready_count"], 1)
-        old_round = self.registry.snapshot("host")["room_info"]["round_id"]
+        before = self.registry.snapshot("host")
+        pending_vote = {"room_code": self.code, "version": before["version"],
+                        "round_id": before["room_info"]["round_id"]}
         self.join("third")
         state = self.registry.snapshot("host")
-        self.assertEqual(state["room_info"]["ready_count"], 0)
-        self.assertGreater(state["room_info"]["round_id"], old_round)
+        self.assertEqual(state["room_info"]["ready_count"], 1)
+        self.assertEqual(state["room_info"]["round_id"], before["room_info"]["round_id"])
+        self.assertTrue(self.registry.snapshot("friend")["room_info"]["ready"])
+        self.assertFalse(self.registry.snapshot("third")["room_info"]["ready"])
+        # An existing player's in-flight vote still belongs to this lobby.
+        self.registry.perform("host", "room/start", pending_vote)
+        self.assertEqual(self.registry.snapshot("host")["phase"], "waiting")
+        self.command("third", "room/start")
+        self.assertEqual(self.registry.snapshot("host")["phase"], "playing")
+
+    def test_leaving_ready_member_keeps_others_ready_and_rejoining_starts_unready(self):
+        self.join("friend")
+        self.join("third")
+        self.command("host", "room/start")
+        self.command("friend", "room/start")
+        self.command("friend", "room/leave")
+        state = self.registry.snapshot("host")
+        self.assertEqual(state["phase"], "waiting")
+        self.assertTrue(state["room_info"]["ready"])
+        self.assertEqual((state["room_info"]["ready_count"], state["room_info"]["ready_total"]), (1, 2))
+        self.join("friend")
+        self.assertFalse(self.registry.snapshot("friend")["room_info"]["ready"])
+        self.assertTrue(self.registry.snapshot("host")["room_info"]["ready"])
+        self.command("third", "room/start")
+        self.assertEqual(self.registry.snapshot("host")["phase"], "waiting")
+        self.command("friend", "room/start")
+        self.assertEqual(self.registry.snapshot("host")["phase"], "playing")
+
+    def test_last_unready_player_leaving_starts_next_hand_once(self):
+        self.join("friend")
+        self.join("third")
+        self.start()
+        room = self.registry.rooms[self.code]
+        self.command("third", "action", kind="fold")
+        self.command("host", "action", kind="fold")
+        self.assertTrue(room.game.table.hand.finished)
+        self.command("host", "next")
+        self.command("friend", "next")
+        before = self.registry.snapshot("host")
+        self.command("third", "room/leave")
+        after = self.registry.snapshot("host")
+        self.assertEqual(after["hand_number"], 2)
+        self.assertEqual(after["phase"], "playing")
+        self.assertEqual(after["room_info"]["ready_count"], 0)
+        self.assertIn(2, room.game.bots)
+        with self.assertRaises(Conflict):
+            self.registry.perform("host", "next", {"room_code": self.code, "version": before["version"], "round_id": before["room_info"]["round_id"]})
+        self.assertEqual(room.game.table.hand_number, 2)
+
+    def test_lone_ready_player_can_cancel_while_waiting_for_enough_players(self):
+        self.join("friend")
+        self.command("host", "room/start")
+        self.command("friend", "room/leave")
+        state = self.registry.snapshot("host")
+        self.assertEqual(state["phase"], "waiting")
+        self.assertTrue(state["room_info"]["ready"])
+        self.assertTrue(state["room_info"]["can_ready"])
+        self.command("host", "room/start", ready=False)
+        self.assertFalse(self.registry.snapshot("host")["room_info"]["ready"])
+        self.assertFalse(self.registry.snapshot("host")["room_info"]["can_start"])
 
     def test_disconnection_does_not_wait_for_full_turn_and_reconnection_keeps_seat(self):
         self.join("friend")
@@ -311,7 +371,7 @@ class RoomTests(unittest.TestCase):
         self.assertIn(1, room.game.bots)
         self.assertLessEqual(room.deadline - self.clock(), BOT_DELAY)
 
-    def test_kicking_unready_member_does_not_force_start_for_remaining_people(self):
+    def test_kicking_last_unready_member_starts_for_remaining_ready_people(self):
         self.join("friend")
         self.join("third")
         self.command("host", "room/start")
@@ -319,8 +379,22 @@ class RoomTests(unittest.TestCase):
         target = next(member["id"] for member in self.registry.snapshot("host")["room_info"]["members"] if member["name"] == "third")
         self.command("host", "room/kick", target_id=target)
         snapshot = self.registry.snapshot("host")
-        self.assertEqual(snapshot["phase"], "waiting")
+        self.assertEqual(snapshot["phase"], "playing")
         self.assertEqual(snapshot["room_info"]["ready_count"], 0)
+
+    def test_kicking_ready_member_preserves_other_votes_and_waits_for_unready_people(self):
+        self.join("friend")
+        self.join("third")
+        self.command("host", "room/start")
+        self.command("friend", "room/start")
+        target = next(member["id"] for member in self.registry.snapshot("host")["room_info"]["members"] if member["name"] == "friend")
+        self.command("host", "room/kick", target_id=target)
+        snapshot = self.registry.snapshot("host")
+        self.assertEqual(snapshot["phase"], "waiting")
+        self.assertTrue(snapshot["room_info"]["ready"])
+        self.assertEqual(snapshot["room_info"]["ready_count"], 1)
+        self.command("third", "room/start")
+        self.assertEqual(self.registry.snapshot("host")["phase"], "playing")
 
     def test_public_member_ids_are_unique_after_seat_changes(self):
         self.join("friend")

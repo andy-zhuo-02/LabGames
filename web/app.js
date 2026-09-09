@@ -14,6 +14,7 @@ const ROOMS = {
   normal: {name:"认真过招", bots:["tight","loose","push_fold","random","tight"]},
   hard: {name:"挑战一下", bots:["equity","nit","loose","tight","push_fold"]},
 };
+const BET_FRACTIONS = [[1 / 4, "¼ 底池"], [1 / 3, "⅓ 底池"], [1 / 2, "½ 底池"], [2 / 3, "⅔ 底池"], [3 / 4, "¾ 底池"], [1, "底池"]];
 const POSITIONS = {
   2:[[50,85],[50,14]],
   3:[[50,85],[23,20],[77,20]],
@@ -312,7 +313,7 @@ function renderControls() {
   if (raiseVersion !== bettingKey) { raiseTo = legal.min_raise_to || 0; raiseVersion = bettingKey; }
   $("turn-title").textContent = "轮到你了";
   $("turn-hint").textContent = legal.check ? "现在可以免费过牌，也可以主动下注。" : `跟注需要 ${fmt(legal.call_amount)} 筹码${legal.call_amount === hero.stack ? "，将投入全部剩余筹码" : ""}。不用着急，想好了再出手。`;
-  updateHTML(container, `<div class="action-buttons"><button id="fold" ${disabled || !legal.fold ? "disabled" : ""}>弃牌</button><button id="check-call" class="call" ${disabled ? "disabled" : ""}>${legal.check ? "过牌" : `跟注 ${fmt(legal.call_amount)}`}</button><button id="raise" class="primary" ${disabled || !canRaise ? "disabled" : ""}>${canRaise ? `加到 ${fmt(raiseTo)}` : "不可加注"}</button><button id="all-in" class="all-in" ${disabled || !legal.all_in ? "disabled" : ""}>全下</button></div>${canRaise ? `<div class="raise-controls"><label class="raise-slider"><span class="sr-only">本轮加注到</span><input id="raise-slider" type="range" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label><label class="raise-amount"><span class="sr-only">本轮加注总额</span><input id="raise-number" type="number" inputmode="numeric" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label></div><div class="quick-bets"><button data-bet="min" ${disabled ? "disabled" : ""}>最小</button><button data-bet="half" ${disabled ? "disabled" : ""}>½ 底池</button><button data-bet="pot" ${disabled ? "disabled" : ""}>底池</button><span id="raise-caption" class="raise-caption">再投入 ${fmt(raiseTo - hero.bet)} 筹码</span></div>` : ""}`);
+  updateHTML(container, `<div class="action-buttons"><button id="fold" ${disabled || !legal.fold ? "disabled" : ""}>弃牌</button><button id="check-call" class="call" ${disabled ? "disabled" : ""}>${legal.check ? "过牌" : `跟注 ${fmt(legal.call_amount)}`}</button><button id="raise" class="primary" ${disabled || !canRaise ? "disabled" : ""}>${canRaise ? `加到 ${fmt(raiseTo)}` : "不可加注"}</button><button id="all-in" class="all-in" ${disabled || !legal.all_in ? "disabled" : ""}>全下</button></div>${canRaise ? `<div class="raise-controls"><label class="raise-slider"><span class="sr-only">本轮加注到</span><input id="raise-slider" type="range" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label><label class="raise-amount"><span class="sr-only">本轮加注总额</span><input id="raise-number" type="number" inputmode="numeric" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label></div><div class="quick-bets"><button data-bet="min" ${disabled ? "disabled" : ""}>最小</button>${BET_FRACTIONS.map(([ratio, label]) => `<button data-bet="${ratio}" ${disabled ? "disabled" : ""}>${label}</button>`).join("")}<span id="raise-caption" class="raise-caption">再投入 ${fmt(raiseTo - hero.bet)} 筹码</span></div>` : ""}`);
   $("fold").onclick = () => request("action", {kind:"fold"});
   $("check-call").onclick = () => legal.call_amount === hero.stack && !legal.check ? confirmAllIn() : request("action", {kind:legal.check ? "check" : "call"});
   $("all-in").onclick = confirmAllIn;
@@ -322,7 +323,7 @@ function renderControls() {
     $("raise-number").onchange = (event) => setRaise(event.target.value);
     document.querySelectorAll("[data-bet]").forEach((button) => { button.onclick = () => {
       const potAfterCall = state.pot + legal.call_amount;
-      setRaise(button.dataset.bet === "min" ? legal.min_raise_to : hero.bet + legal.call_amount + Math.round(potAfterCall * (button.dataset.bet === "half" ? .5 : 1)));
+      setRaise(button.dataset.bet === "min" ? legal.min_raise_to : hero.bet + legal.call_amount + Math.round(potAfterCall * Number(button.dataset.bet)));
     }; });
   }
 }
@@ -396,7 +397,7 @@ function renderRoom() {
     const member = room.members.find((item) => item.id === button.dataset.kick);
     if (!member) return;
     pendingKick = {id:member.id, room:room.code};
-    $("kick-copy").textContent = `确认将 ${member.name} 移出房间？开局后该座位由 AI 接替，其他人的准备状态会重置。`;
+    $("kick-copy").textContent = `确认将 ${member.name} 移出房间？开局后该座位由 AI 接替。其他人的准备状态会保留，剩余玩家全部准备好后会自动继续。`;
     openDialog("kick-dialog");
   }; });
 }

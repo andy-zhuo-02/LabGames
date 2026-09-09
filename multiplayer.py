@@ -161,7 +161,7 @@ class RoomRegistry:
             snapshot["version"] = room.version
             eligible = room.readiness_members()
             between_hands = room.game is None or room.game.table.hand.finished
-            can_ready = between_hands and sid in eligible and (room.game is not None or len(room.members) >= 2 or room.fill_bots)
+            can_ready = between_hands and sid in eligible and (sid in room.ready or room.game is not None or len(room.members) >= 2 or room.fill_bots)
             remaining = room.deadline
             if room.game and not room.game.table.hand.finished:
                 actor = room.game.table.hand.actor_id
@@ -233,7 +233,6 @@ class RoomRegistry:
                 room.members[sid] = Member(name, now, len(room.members))
                 self.membership[sid] = code
                 self.departures.pop(sid, None)
-                room.reset_ready()
                 room.changed(now)
                 return
             if route == "room/leave" and sid not in self.membership:
@@ -269,11 +268,11 @@ class RoomRegistry:
                     raise Conflict("整桌结束后才能共同确认重新组桌。")
                 if sid not in room.readiness_members():
                     raise Conflict("你的筹码已用尽，可以继续观战，无需准备下一手。")
-                if room.game is None and len(room.members) < 2 and not room.fill_bots:
-                    raise Conflict("至少需要两位玩家，或者开启 AI 补位。")
                 ready = payload.get("ready", True)
                 if type(ready) is not bool:
                     raise ValueError("准备状态必须是 true 或 false。")
+                if ready and room.game is None and len(room.members) < 2 and not room.fill_bots:
+                    raise Conflict("至少需要两位玩家，或者开启 AI 补位。")
                 if ready:
                     room.ready.add(sid)
                 else:
@@ -291,6 +290,7 @@ class RoomRegistry:
 
     def _remove_member(self, room, sid, now, *, kicked=False):
         member = room.members.pop(sid)
+        room.ready.discard(sid)
         del self.membership[sid]
         if kicked:
             self.departures[sid] = {"code": room.code, "message": "你已被房主移出房间。"}
@@ -308,7 +308,8 @@ class RoomRegistry:
             if room.game.table.hand.actor_id == player_id:
                 room.turn_key = None
             room.notice += "该座位由 AI 接替。"
-        room.reset_ready()
+        # Membership changes preserve everyone else's consent for this same hand.
+        self._advance_if_ready(room, now)
         room.changed(now)
 
     def _advance_if_ready(self, room, now):
