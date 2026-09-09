@@ -10,7 +10,7 @@ from unittest.mock import patch
 from bots import passive_action
 from browser_game import BrowserGame, Conflict
 from engine import Action, GameConfig, IllegalAction, Table
-from multiplayer import BOT_DELAY, HOST_TIMEOUT, TURN_SECONDS, RoomRegistry
+from multiplayer import BOT_DELAY, DISCONNECT_SECONDS, HOST_TIMEOUT, TURN_SECONDS, RoomRegistry
 from web_app import PokerServer
 
 
@@ -37,15 +37,26 @@ class RoomTests(unittest.TestCase):
 
     def command(self, sid, route, **payload):
         state = self.registry.snapshot(sid)
-        self.registry.perform(sid, route, {"version": state["version"], "room_code": state["room_info"]["code"], **payload})
+        self.registry.perform(sid, route, {"version": state["version"], "room_code": state["room_info"]["code"], "round_id": state["room_info"]["round_id"], **payload})
 
-    def test_waiting_room_and_only_host_can_start(self):
+    def prepare_all(self, route):
+        room = self.registry.rooms[self.code]
+        eligible = room.readiness_members()
+        for sid in list(room.members):
+            if sid in eligible:
+                self.command(sid, route)
+
+    def start(self):
+        self.prepare_all("room/start")
+
+    def test_waiting_room_needs_everyones_consent(self):
         with self.assertRaises(Conflict):
             self.command("host", "room/start")
         self.join("friend")
-        with self.assertRaises(Conflict):
-            self.command("friend", "room/start")
         self.command("host", "room/start")
+        self.assertEqual(self.registry.snapshot("friend")["phase"], "waiting")
+        self.assertEqual(self.registry.snapshot("friend")["room_info"]["ready_count"], 1)
+        self.command("friend", "room/start")
         self.assertEqual(self.registry.snapshot("friend")["phase"], "playing")
         with self.assertRaises(Conflict):
             self.join("latecomer")
@@ -65,7 +76,7 @@ class RoomTests(unittest.TestCase):
 
     def test_session_identity_cannot_be_overridden_and_versions_are_required(self):
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         host = self.registry.snapshot("host")
         friend = self.registry.snapshot("friend")
         self.assertEqual((host["viewer_id"], friend["viewer_id"]), (0, 1))
@@ -89,7 +100,7 @@ class RoomTests(unittest.TestCase):
 
     def test_other_room_cannot_control_or_read_this_table(self):
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         self.registry.perform("stranger", "room/create", {"name": "stranger"})
         before = self.registry.snapshot("host")
         with self.assertRaises(Conflict):
@@ -102,7 +113,7 @@ class RoomTests(unittest.TestCase):
         sessions = ["host", "friend", "third", "fourth"]
         for sid in sessions[1:]:
             self.join(sid)
-        self.command("host", "room/start")
+        self.start()
         room = self.registry.rooms[self.code]
         self.command("third", "action", kind="fold")
         for _ in range(80):
@@ -126,9 +137,10 @@ class RoomTests(unittest.TestCase):
             self.assertEqual({hand["player_id"] for hand in snapshot["result"]["shown_hands"]}, {0, 1, 3})
             if sid != "third":
                 self.assertFalse(snapshot["players"][2]["cards"])
-        with self.assertRaises(Conflict):
-            self.command("friend", "next")
         self.command("host", "next")
+        self.assertEqual(self.registry.snapshot("friend")["hand_number"], 1)
+        for sid in sessions[1:]:
+            self.command(sid, "next")
         self.assertEqual(self.registry.snapshot("friend")["hand_number"], 2)
 
     def test_bot_moves_once_on_server_without_any_client_step(self):
@@ -136,7 +148,7 @@ class RoomTests(unittest.TestCase):
         self.registry.perform("host", "room/create", {"name": "房主", "capacity": 3, "fill_bots": True})
         self.code = self.registry.membership["host"]
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         before = self.registry.snapshot("host")
         self.assertEqual(before["actor_id"], 2)
         self.registry.tick()
@@ -151,7 +163,7 @@ class RoomTests(unittest.TestCase):
 
     def test_timeout_folds_without_calling_and_transfers_disconnected_host(self):
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         room = self.registry.rooms[self.code]
         self.clock.advance(TURN_SECONDS - 1)
         self.registry.snapshot("friend")
@@ -170,7 +182,7 @@ class RoomTests(unittest.TestCase):
 
     def test_timeout_checks_when_it_is_free(self):
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         self.command("friend", "action", kind="call")
         self.clock.advance(TURN_SECONDS)
         self.registry.snapshot("host")
@@ -182,7 +194,7 @@ class RoomTests(unittest.TestCase):
 
     def test_leaving_transfers_host_and_ai_takes_over_departed_seat(self):
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         self.command("host", "room/leave")
         room = self.registry.rooms[self.code]
         self.assertIsNone(self.registry.snapshot("host"))
@@ -199,7 +211,7 @@ class RoomTests(unittest.TestCase):
     def test_busted_player_spectates_without_receiving_another_players_cards(self):
         self.join("friend")
         self.join("third")
-        self.command("host", "room/start")
+        self.start()
         room = self.registry.rooms[self.code]
         # Player 0 is out before this hand starts; the other humans keep playing.
         room.game.table = Table(["房主", "friend", "third"], stacks=[0, 3000, 3000], seed=12)
@@ -211,21 +223,129 @@ class RoomTests(unittest.TestCase):
         self.assertFalse(snapshot["legal"]["check"])
         self.assertEqual(snapshot["hand_type"], "")
 
+    def test_simultaneous_ready_votes_accept_same_revision_but_not_old_round(self):
+        self.join("friend")
+        state = self.registry.snapshot("host")
+        payload = {"version": state["version"], "room_code": self.code,
+                   "round_id": state["room_info"]["round_id"], "ready": True}
+        self.registry.perform("host", "room/start", payload)
+        self.registry.perform("friend", "room/start", payload)
+        room = self.registry.rooms[self.code]
+        self.assertEqual(room.game.table.hand_number, 1)
+        with self.assertRaises(Conflict):
+            self.registry.perform("friend", "room/start", payload)
+        self.assertEqual(room.game.table.hand_number, 1)
+
+    def test_ready_can_be_cancelled_and_membership_change_clears_votes(self):
+        self.join("friend")
+        self.command("host", "room/start")
+        self.command("host", "room/start", ready=False)
+        self.command("friend", "room/start")
+        self.assertEqual(self.registry.snapshot("host")["phase"], "waiting")
+        self.assertEqual(self.registry.snapshot("host")["room_info"]["ready_count"], 1)
+        old_round = self.registry.snapshot("host")["room_info"]["round_id"]
+        self.join("third")
+        state = self.registry.snapshot("host")
+        self.assertEqual(state["room_info"]["ready_count"], 0)
+        self.assertGreater(state["room_info"]["round_id"], old_round)
+
+    def test_disconnection_does_not_wait_for_full_turn_and_reconnection_keeps_seat(self):
+        self.join("friend")
+        self.start()
+        room = self.registry.rooms[self.code]
+        self.clock.advance(DISCONNECT_SECONDS - 1)
+        self.registry.snapshot("host")
+        self.registry.tick()
+        self.assertFalse(room.game.table.hand.finished)
+        self.clock.advance(1)
+        self.registry.tick()
+        self.assertTrue(room.game.table.hand.finished)
+        self.assertEqual(room.game.table.hand.actions[-1].action.kind, "fold")
+        self.assertIn("离线", room.notice)
+        self.assertEqual(self.registry.snapshot("friend")["viewer_id"], 1)
+        self.command("host", "next")
+        self.assertEqual(room.game.table.hand_number, 1)
+
+    def test_explicit_leave_ignores_stale_version_and_immediately_releases_actor(self):
+        self.join("friend")
+        self.start()
+        before = self.registry.snapshot("friend")
+        self.registry.perform("friend", "room/leave", {"room_code": self.code, "version": before["version"] - 1})
+        room = self.registry.rooms[self.code]
+        self.assertIn(1, room.game.bots)
+        self.assertLessEqual(room.deadline - self.clock(), BOT_DELAY)
+        self.registry.perform("friend", "room/leave", {"room_code": self.code})
+        self.clock.advance(BOT_DELAY)
+        self.registry.tick()
+        self.assertEqual(len(room.game.table.hand.actions), 1)
+
+    def test_leaving_another_seat_does_not_restart_current_players_timer(self):
+        self.join("friend")
+        self.join("third")
+        self.start()
+        room = self.registry.rooms[self.code]
+        deadline = room.deadline
+        self.clock.advance(5)
+        self.command("friend", "room/leave")
+        self.assertEqual(room.deadline, deadline)
+
+    def test_only_host_can_kick_and_target_cannot_act_or_rejoin(self):
+        self.join("friend")
+        self.start()
+        before = self.registry.snapshot("host")
+        target_id = next(member["id"] for member in before["room_info"]["members"] if not member["is_you"])
+        host_id = next(member["id"] for member in before["room_info"]["members"] if member["is_you"])
+        for target in (host_id, "not-a-member"):
+            with self.assertRaises(Conflict):
+                self.command("host", "room/kick", target_id=target)
+        with self.assertRaises(Conflict):
+            self.command("friend", "room/kick", target_id=host_id)
+        self.command("host", "room/kick", target_id=target_id)
+        self.assertIsNone(self.registry.snapshot("friend"))
+        self.assertIn("移出", self.registry.departure("friend")["message"])
+        with self.assertRaises(Conflict):
+            self.registry.perform("friend", "action", {"room_code": self.code, "version": before["version"], "kind": "call"})
+        with self.assertRaises(Conflict):
+            self.join("friend")
+        room = self.registry.rooms[self.code]
+        self.assertIn(1, room.game.bots)
+        self.assertLessEqual(room.deadline - self.clock(), BOT_DELAY)
+
+    def test_kicking_unready_member_does_not_force_start_for_remaining_people(self):
+        self.join("friend")
+        self.join("third")
+        self.command("host", "room/start")
+        self.command("friend", "room/start")
+        target = next(member["id"] for member in self.registry.snapshot("host")["room_info"]["members"] if member["name"] == "third")
+        self.command("host", "room/kick", target_id=target)
+        snapshot = self.registry.snapshot("host")
+        self.assertEqual(snapshot["phase"], "waiting")
+        self.assertEqual(snapshot["room_info"]["ready_count"], 0)
+
+    def test_public_member_ids_are_unique_after_seat_changes(self):
+        self.join("friend")
+        self.join("third")
+        self.command("friend", "room/leave")
+        self.join("fourth")
+        members = self.registry.snapshot("host")["room_info"]["members"]
+        self.assertEqual(len({member["id"] for member in members}), len(members))
+        self.assertNotIn("host", {member["id"] for member in members})
+
     def test_rematch_returns_to_lobby_and_keeps_member_identities(self):
         from test_poker import fixed_deck
         self.join("friend")
-        self.command("host", "room/start")
+        self.start()
         room = self.registry.rooms[self.code]
         room.game.table = Table(["房主", "friend"], GameConfig(starting_stack=20))
         room.game.table.start_hand(deck=fixed_deck(["AsAd", "KsKd"], "2c3h7d9sTc"))
         self.command("friend", "action", kind="all_in")
         self.assertTrue(self.registry.snapshot("host")["result"]["match_over"])
-        with self.assertRaises(Conflict):
-            self.command("friend", "room/rematch")
+        self.command("friend", "room/rematch")
+        self.assertEqual(self.registry.snapshot("friend")["phase"], "finished")
         self.command("host", "room/rematch")
         self.assertEqual(self.registry.snapshot("friend")["phase"], "waiting")
         self.join("third")
-        self.command("host", "room/start")
+        self.start()
         self.assertEqual(self.registry.snapshot("friend")["viewer_id"], 1)
         self.assertEqual(sum(player["stack"] for player in self.registry.snapshot("friend")["players"]) + 30, 6000)
 
@@ -251,7 +371,7 @@ class Client:
 
     def command(self, route, **payload):
         _, state = self.request()
-        return self.request(route, {"version": state["version"], "room_code": state.get("room_info", {}).get("code"), **payload})
+        return self.request(route, {"version": state["version"], "room_code": state.get("room_info", {}).get("code"), "round_id": state.get("room_info", {}).get("round_id"), **payload})
 
 
 class MultiplayerHTTPTests(unittest.TestCase):
@@ -278,6 +398,8 @@ class MultiplayerHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotEqual(self.host.cookie, self.friend.cookie)
         self.assertEqual(self.host.command("room/start")[0], 200)
+        self.assertEqual(self.host.request()[1]["phase"], "waiting")
+        self.assertEqual(self.friend.command("room/start")[0], 200)
         self.assertEqual(self.friend.request()[1]["viewer_id"], 1)
         stranger = self.stranger.request()[1]
         self.assertEqual(stranger["phase"], "lobby")
@@ -297,7 +419,8 @@ class MultiplayerHTTPTests(unittest.TestCase):
         else:
             self.fail("HTTP game did not finish")
         self.assertEqual(views[0]["result"]["profit"], -views[1]["result"]["profit"])
-        self.assertEqual(self.friend.command("next")[0], 409)
+        self.assertEqual(self.friend.command("next")[0], 200)
+        self.assertEqual(self.host.request()[1]["hand_number"], 1)
         self.assertEqual(self.host.command("next")[0], 200)
         saved_cookie = self.friend.cookie
         refreshed = Client(self.server.server_port)
@@ -313,6 +436,27 @@ class MultiplayerHTTPTests(unittest.TestCase):
         self.assertEqual(self.host.request(headers={"Host": address})[0], 200)
         self.assertEqual(self.host.request(headers={"Host": f"evil.example:{self.server.server_port}"})[0], 403)
         self.assertEqual(self.host.request("room/create", {"name": "Alice"}, headers={"Origin": "https://evil.example"})[0], 403)
+
+    def test_kicked_client_gets_notice_and_stale_room_request_cannot_touch_solo_game(self):
+        # A previously paused solo game can share a version number with the room.
+        status, solo = self.friend.command("new", name="Bob", opponents=["calling_station"])
+        self.assertEqual(status, 200)
+        status, room = self.host.request("room/create", {"name": "Alice", "capacity": 2, "fill_bots": False})
+        self.assertEqual(status, 200)
+        code = room["room_info"]["code"]
+        self.assertEqual(self.friend.request("room/join", {"name": "Bob", "code": code})[0], 200)
+        target = next(m["id"] for m in self.host.request()[1]["room_info"]["members"] if m["name"] == "Bob")
+        self.assertEqual(self.host.command("room/kick", target_id=target)[0], 200)
+        status, returned = self.friend.request()
+        self.assertEqual(status, 200)
+        self.assertEqual(returned["room_exit"]["code"], code)
+        self.assertNotIn("room_info", returned)
+        self.assertEqual(returned["players"], solo["players"])
+        status, rejected = self.friend.request("step", {"room_code": code, "version": solo["version"]})
+        self.assertEqual(status, 409)
+        self.assertEqual(rejected["state"]["players"], solo["players"])
+        self.assertEqual(rejected["state"]["actions"], solo["actions"])
+        self.assertEqual(self.friend.request("room/join", {"name": "Bob", "code": code})[0], 409)
 
 
 if __name__ == "__main__":

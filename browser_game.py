@@ -139,6 +139,12 @@ class BrowserGame:
         own_cards = observation.hole_cards if participating else ()
         public = {player.player_id: player for player in observation.players}
         result = hand.result() if hand.finished else None
+        awards = {}
+        if result:
+            for pot in result.payouts:
+                for player_id, amount in pot.awards:
+                    if amount:
+                        awards[player_id] = awards.get(player_id, 0) + amount
         shown = {item.player_id: item.cards for item in result.shown_hands} if result else {}
         folded = {record.player_id for record in hand.actions if record.action.kind == "fold"}
         latest = {record.player_id: record for record in hand.actions}
@@ -159,6 +165,7 @@ class BrowserGame:
                 "all_in": bool(player and player.active and player.stack == 0 and not hand.finished),
                 "cards": list(own_cards) if seat.player_id == viewer_id else list(shown.get(seat.player_id, ())),
                 "last_action": describe_action(latest[seat.player_id]) if seat.player_id in latest else "",
+                "is_winner": seat.player_id in awards, "won_amount": awards.get(seat.player_id, 0),
             })
         current_type = ""
         if own_cards and len(observation.board) >= 3:
@@ -170,6 +177,7 @@ class BrowserGame:
         if result:
             payoff = dict(result.payoffs).get(viewer_id, 0)
             summary = {
+                "winner_ids": sorted(awards),
                 "end_reason": "showdown" if result.shown_hands else "folds",
                 "explanation": ("本手进入摊牌，未弃牌的玩家全部亮出底牌。" if result.shown_hands
                                 else "其他玩家均已弃牌，最后留下的玩家直接收下底池，无需亮牌。"),

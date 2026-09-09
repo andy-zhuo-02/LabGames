@@ -16,6 +16,7 @@
     <nav aria-label="游戏设置">
       <button id="sound-button" class="quiet" aria-pressed="false" title="开启或关闭游戏音效">音效：关</button>
       <button id="help-button" class="quiet">怎么玩</button>
+      <button id="rankings-button" class="quiet">牌型大小</button>
       <button id="friends-button" class="outline">和朋友玩</button>
       <button id="room-button" class="outline">选牌桌</button>
     </nav>
@@ -25,10 +26,11 @@
     <div class="game-heading"><div><p class="eyebrow">坐下来，打几手。</p><h1 id="heading">今晚的牌局</h1></div><div class="game-meta"><span id="hand-label">无限注德州扑克</span><span>盲注 <b>10 / 20</b></span></div></div>
     <div id="connection" class="connection" role="alert" hidden><span id="connection-message"></span><button id="retry-button" class="outline">重新连接</button></div>
     <section id="room-panel" class="room-panel" aria-label="好友房间" hidden>
-      <div class="room-bar"><div><span class="eyebrow">好友同桌</span><h2>房间 <span id="room-code"></span></h2></div><button id="leave-room" class="outline">退出房间</button></div>
+      <div class="room-bar"><div><span class="eyebrow">好友同桌</span><h2>房间 <span id="room-code"></span></h2></div><button id="leave-room" class="outline">离开牌桌</button></div>
       <div class="invite-row"><label><span class="sr-only">邀请朋友的链接</span><input id="invite-url" readonly></label><button id="copy-invite">复制邀请链接</button></div>
       <p id="room-status" class="room-status" role="status"></p>
-      <div id="waiting-room" hidden><h3>朋友到齐，房主就可以发牌</h3><div id="room-members" class="room-members"></div><div class="waiting-footer"><p id="waiting-note"></p><button id="start-room" class="primary">开始发牌 →</button></div></div>
+      <details id="members-panel" open><summary>牌友与准备状态 <span id="ready-count"></span></summary><div id="room-members" class="room-members"></div></details>
+      <div id="waiting-room" hidden><h3>每个人都准备好，才开始发牌</h3><div class="waiting-footer"><p id="waiting-note"></p><button id="start-room" class="primary">我准备好了</button></div></div>
     </section>
     <div class="game-layout">
       <section class="play-area" aria-label="德州扑克桌">
@@ -43,8 +45,9 @@
           <div id="seats"></div>
         </div>
         <section class="action-dock" aria-label="你的操作">
-          <div class="turn-header"><div><p id="turn-title" class="turn-title" role="status" tabindex="-1">正在准备牌桌…</p><p id="turn-hint" class="muted">每人 2,000 筹码，从容开始。</p></div><span id="hand-strength" class="hand-strength" hidden></span></div>
+          <div class="turn-header"><div><p id="turn-title" class="turn-title" role="status" tabindex="-1">正在准备牌桌…</p><p id="turn-hint" class="muted">每人 2,000 筹码，从容开始。</p></div><button id="hand-strength" class="hand-strength" aria-haspopup="dialog" title="查看牌型大小" hidden></button></div>
           <div id="controls"></div>
+          <div id="table-exit-bar" class="table-exit-bar" hidden><span id="table-ready-note"></span><button id="quick-leave-room" class="outline">离开牌桌</button></div>
         </section>
         <p class="table-footnote"><span>♠ ♥ ♣ ♦ &nbsp; 只管享受这一手</span><span>本地游玩 · 虚拟筹码</span></p>
       </section>
@@ -85,18 +88,20 @@
   </dialog>
 
   <dialog id="all-in-dialog" class="small-dialog" aria-labelledby="all-in-title"><h2 id="all-in-title">把筹码推到中间？</h2><p id="all-in-copy"></p><div class="dialog-actions"><button class="outline" data-close="all-in-dialog">再想一下</button><button id="confirm-all-in" class="primary">确认全下</button></div></dialog>
+  <dialog id="rankings-dialog" aria-labelledby="rankings-title"><div class="dialog-heading"><div><p class="eyebrow">从强到弱，一眼看懂</p><h2 id="rankings-title">牌型大小速查</h2></div><button class="icon-button" data-close="rankings-dialog" aria-label="关闭牌型提示">×</button></div><div id="rankings-list" class="rankings-list"></div><p class="muted">同类牌型先比较组成牌型的点数，再依次比较踢脚牌；完全相同则平分。花色不分大小。A–2–3–4–5 是最小顺子，皇家同花顺是最大的同花顺。</p><p class="muted">WIN 表示赢得主池或边池；平分或多人分别赢得边池时，会有多名赢家。净盈亏仍以结算金额为准。</p><button class="primary start-button" data-close="rankings-dialog">回到牌桌</button></dialog>
   <dialog id="network-dialog" aria-labelledby="network-title">
     <div class="dialog-heading"><div><p class="eyebrow">同一个 Wi-Fi，同一张牌桌</p><h2 id="network-title">叫上朋友，坐到一起</h2></div><button class="icon-button" data-close="network-dialog" aria-label="关闭好友房间窗口">×</button></div>
     <p id="network-hint" class="dialog-intro">一个人创建房间，其他人打开邀请链接或输入房间码加入。</p>
     <label class="friend-name-label">你的昵称<input id="friend-name" maxlength="12" required autocomplete="nickname" placeholder="给朋友认得出的名字"></label>
     <div class="network-options">
       <section><h3>我来开一桌</h3><label>最多几人<select id="room-capacity"><option value="2">2 人</option><option value="3">3 人</option><option value="4" selected>4 人</option><option value="5">5 人</option><option value="6">6 人</option></select></label><label class="checkbox-label"><input id="fill-bots" type="checkbox" checked>空位由 AI 补齐</label><label id="room-bot-label">补位 AI 风格<select id="room-bot"></select></label><button id="create-room" class="primary">创建房间</button></section>
-      <section><h3>去朋友的牌桌</h3><label>六位房间码<input id="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 ABC234"></label><p class="muted">也可以直接打开朋友发来的邀请链接。等候室中的所有人到齐后，由房主开始。</p><button id="join-room" class="primary">加入房间</button></section>
+      <section><h3>去朋友的牌桌</h3><label>六位房间码<input id="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 ABC234"></label><p class="muted">也可以直接打开朋友发来的邀请链接。所有人点击准备后，自动开始发牌。</p><button id="join-room" class="primary">加入房间</button></section>
     </div>
     <p id="network-error" class="form-error" role="alert" hidden></p>
-    <p class="setup-note">每个设备只显示自己的底牌。90 秒未操作会自动过牌或弃牌；断线后用原浏览器、原地址重新打开即可回到座位。</p>
+    <p class="setup-note">每个设备只显示自己的底牌。在线思考限时 90 秒；离线约 12 秒后自动过牌或弃牌。暂时离开可重连，主动离桌则由 AI 接替。</p>
   </dialog>
-  <dialog id="leave-room-dialog" class="small-dialog" aria-labelledby="leave-room-title"><h2 id="leave-room-title">要离开这张牌桌吗？</h2><p>已经开局时，AI 会接替你的座位。暂时断线或刷新页面不需要退出房间。</p><div class="dialog-actions"><button class="outline" data-close="leave-room-dialog">留下继续玩</button><button id="confirm-leave-room" class="primary">退出房间</button></div></dialog>
+  <dialog id="leave-room-dialog" class="small-dialog" aria-labelledby="leave-room-title"><h2 id="leave-room-title">要离开这张牌桌吗？</h2><p>确认后立即离桌，AI 会接替你的座位，其他人无需等 90 秒。暂时断线或刷新页面不需要退出房间。</p><div class="dialog-actions"><button class="outline" data-close="leave-room-dialog">留下继续玩</button><button id="confirm-leave-room" class="primary">确认离桌</button></div></dialog>
+  <dialog id="kick-dialog" class="small-dialog" aria-labelledby="kick-title"><h2 id="kick-title">移出这位牌友？</h2><p id="kick-copy"></p><div class="dialog-actions"><button class="outline" data-close="kick-dialog">取消</button><button id="confirm-kick" class="primary">确认移出</button></div></dialog>
   <noscript>请在浏览器中启用 JavaScript 后开始游戏。</noscript>
 </body>
 </html>

@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from bots import make_bot, passive_action
-from engine import GameConfig, IllegalAction, Table
+from engine import Action, GameConfig, IllegalAction, Table
+from test_poker import check_down, fixed_deck
 from web_app import BrowserGame, Conflict, PokerServer, PROFILES
 
 
@@ -161,6 +162,47 @@ class BrowserGameTests(unittest.TestCase):
         self.assertIn("无需亮牌", snapshot["result"]["explanation"])
         self.assertTrue(snapshot["result"]["returned_bets"])
         self.assertGreater(snapshot["result"]["profit"], 0)
+        self.assertEqual(snapshot["result"]["winner_ids"], [0])
+        self.assertEqual([p["is_winner"] for p in snapshot["players"]], [True, False, False])
+        self.assertEqual(snapshot["players"][0]["won_amount"], snapshot["result"]["pot"])
+
+    def test_showdown_win_marks_winner_and_clears_for_next_hand(self):
+        self.game.table = Table()
+        self.game.table.start_hand(deck=fixed_deck(["AsAd", "KsKd", "QsQd"], "2c3h7d9sTc"))
+        check_down(self.game.table)
+        self.game._account_result()
+        snapshot = self.game.snapshot()
+        self.assertEqual(snapshot["result"]["winner_ids"], [0])
+        self.assertEqual([p["is_winner"] for p in snapshot["players"]], [True, False, False])
+        self.assertEqual(snapshot["players"][0]["won_amount"], 60)
+        command(self.game, "next")
+        self.assertIsNone(self.game.snapshot()["result"])
+        self.assertTrue(all(not p["is_winner"] and p["won_amount"] == 0 for p in self.game.snapshot()["players"]))
+
+    def test_side_pot_winner_gets_win_even_without_net_profit_but_refund_does_not(self):
+        self.game.table = Table(stacks=[100, 200, 300])
+        hand = self.game.table.start_hand(deck=fixed_deck(["AsAd", "KsKd", "QsQd"], "2c3h7d9sTc"))
+        while not hand.finished:
+            self.game.table.apply_action(hand.actor_id, Action("all_in"))
+        self.game._account_result()
+        snapshot = self.game.snapshot()
+        self.assertEqual(snapshot["result"]["winner_ids"], [0, 1])
+        self.assertEqual([p["won_amount"] for p in snapshot["players"]], [300, 200, 0])
+        self.assertEqual(self.game.snapshot(1, multiplayer=True)["result"]["profit"], 0)
+        self.assertEqual([p["is_winner"] for p in snapshot["players"]], [True, True, False])
+        self.assertEqual(snapshot["result"]["returned_bets"][0]["amount"], 100)
+
+    def test_split_pot_marks_all_tied_winners(self):
+        self.game.table = Table()
+        self.game.table.start_hand(deck=fixed_deck(["2s3d", "4s5d", "6s7d"], "TcJcQcKcAc"))
+        check_down(self.game.table)
+        self.game._account_result()
+        for viewer_id in range(3):
+            snapshot = self.game.snapshot(viewer_id, multiplayer=True)
+            self.assertEqual(snapshot["result"]["winner_ids"], [0, 1, 2])
+            self.assertEqual(snapshot["result"]["profit"], 0)
+            self.assertTrue(all(p["is_winner"] for p in snapshot["players"]))
+            self.assertEqual([p["won_amount"] for p in snapshot["players"]], [20, 20, 20])
 
     def test_full_games_for_each_strategy_keep_chip_totals_and_end(self):
         # Short stacks exercise elimination, all-ins and the match-over boundary quickly.

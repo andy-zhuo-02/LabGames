@@ -69,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
         snapshot = self.server.rooms.snapshot(sid) or game.snapshot()
         lan_urls = [f"http://{ip}:{self.server.server_port}" for ip in self.server.lan_ips]
         snapshot["network"] = {"enabled": bool(lan_urls), "urls": lan_urls}
+        departure = self.server.rooms.departure(sid)
+        if departure and "room_info" not in snapshot:
+            snapshot["room_exit"] = departure
         if "room_info" in snapshot:
             host = self.headers.get("Host")
             local = host in {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
@@ -130,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = urlsplit(self.path).path.removeprefix("/api/")
         if route not in {"new", "action", "step", "next", "finish", "room/create", "room/join",
-                         "room/start", "room/leave", "room/rematch"}:
+                         "room/start", "room/leave", "room/rematch", "room/kick"}:
             self._json({"error": "未知操作。"}, 404)
             return
         try:
@@ -149,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
                         if type(payload.get("version")) is not int or payload["version"] != game.version:
                             raise Conflict("牌桌已经更新，请确认当前画面后重新开桌。")
                         game.start(payload)
-                    elif route.startswith("room/") or self.server.rooms.contains(sid):
+                    elif route.startswith("room/") or self.server.rooms.contains(sid) or payload.get("room_code"):
                         self.server.rooms.perform(sid, route, payload)
                     else:
                         game.command(route, payload)
