@@ -177,6 +177,9 @@ async function pollRoom() {
 }
 
 function renderSeats(players, current) {
+  const readyNames = new Set(multiplayer() && state.phase === "finished"
+    ? state.room_info.members.filter((member) => member.ready && member.needs_ready).map((member) => member.name)
+    : []);
   const viewerIndex = players.findIndex((player) => player.id === viewerId());
   if (viewerIndex > 0) players = [...players.slice(viewerIndex), ...players.slice(0, viewerIndex)];
   const positions = POSITIONS[players.length];
@@ -186,7 +189,8 @@ function renderSeats(players, current) {
   }
   players.forEach((player, index) => {
     const el = $("seats").children[index];
-    el.className = `seat ${player.id === viewerId() ? "hero" : ""} ${player.id === current ? "active" : ""} ${player.folded ? "folded" : ""} ${player.eliminated ? "eliminated" : ""} ${player.is_winner ? "winner" : ""}`;
+    const ready = player.strategy === "human" && readyNames.has(player.name);
+    el.className = `seat ${player.id === viewerId() ? "hero" : ""} ${player.id === current ? "active" : ""} ${player.folded ? "folded" : ""} ${player.eliminated ? "eliminated" : ""} ${player.is_winner ? "winner" : ""} ${ready ? "seat-ready" : ""}`;
     el.style.setProperty("--x", `${positions[index][0]}%`); el.style.setProperty("--y", `${positions[index][1]}%`);
     el.style.setProperty("--avatar", player.color);
     let status = player.eliminated ? "已离桌" : player.folded ? "已弃牌" : player.all_in ? "全下" : player.id === current ? player.id === viewerId() ? "轮到你了" : player.strategy === "human" ? "正在选择动作…" : "正在思考…" : player.last_action || "等待行动";
@@ -208,7 +212,7 @@ function renderSeats(players, current) {
     holes.setAttribute("aria-label", `${player.name}的底牌${ownCards && privacy ? "，按住空格键查看" : ""}`);
     updateHTML(holes, cards);
     updateHTML(el.querySelector(".seat-box"), `${player.is_winner ? `<span class="win-badge seat-win" title="赢得底池 ${fmt(player.won_amount)}">WIN</span>` : ""}<div class="seat-top"><span class="avatar" aria-hidden="true">${esc(player.avatar)}</span><div><div class="seat-name" title="${esc(player.name)}">${esc(player.name)}${player.id === viewerId() && player.name !== "你" ? " · 你" : ""}</div><div class="seat-style">${esc(player.style)}</div></div></div><div class="seat-money">${fmt(player.stack)}</div>${position ? `<span class="position ${position.includes("D") ? "dealer" : ""}" title="${esc(player.position)}">${esc(position)}</span>` : ""}`);
-    el.querySelector(".seat-action").textContent = status;
+    updateHTML(el.querySelector(".seat-action"), ready ? '<span class="ready-badge">✓ 已准备</span>' : esc(status));
     el.querySelector(".seat-bet").hidden = !player.bet;
     el.querySelector(".seat-bet").textContent = `◉ ${fmt(player.bet || 0)}`;
   });

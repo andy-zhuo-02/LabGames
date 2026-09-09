@@ -38,6 +38,8 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 .privacy-mode:not(.peeking) .private-front,.privacy-mode:not(.peeking) .private-detail{display:none}.privacy-mode:not(.peeking) .private-back{display:flex}.privacy-mode:not(.peeking) .privacy-cover{display:inline}
 #privacy-button[aria-pressed="true"]{color:var(--gold);background:#e8cb8714}.privacy-hint{font-size:13px;color:var(--gold);margin:-5px 0 15px}
 .seat-win{position:absolute;top:-14px;left:8px;box-shadow:0 2px 7px #0004}.seat.winner .seat-box{border-color:var(--gold);box-shadow:0 0 0 2px #e8cb8722,0 6px 15px #0003}
+.seat.seat-ready .avatar{border-color:var(--green);border-radius:8px;outline:2px solid #79ceb077;outline-offset:2px}.seat.seat-ready .seat-box{opacity:1}
+.seat-action .ready-badge{display:inline-block;color:#a5efd0;background:#163e32;border:1px solid var(--green);border-radius:5px;padding:0 8px;font-size:12px;font-weight:600;line-height:20px;box-shadow:0 2px 6px #0003}
 .table-exit-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--border);margin-top:18px;padding-top:14px}.table-exit-bar span{font-size:13px;color:var(--muted)}.table-exit-bar button{white-space:nowrap;font-size:14px}
 #members-panel{border-top:1px solid var(--border);margin-top:16px;padding-top:14px}#members-panel summary{cursor:pointer;font-size:14px}#ready-count{color:var(--gold);float:right}
 .room-member .member-status{display:block;margin-top:6px}.room-member.member-ready{border-color:#79ceb055}.room-member.member-ready .member-status{color:var(--green)}
