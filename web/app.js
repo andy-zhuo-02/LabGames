@@ -29,6 +29,7 @@ let privacy = prefs.get("privacy", "off") === "on";
 let peekTarget = null, peekPointer = null, privacyContext = null;
 let pollTimer = null, polling = false, mutationEpoch = 0, lastControlsKey = null, pendingAllIn = null;
 let pendingKick = null, departureSeen = null;
+let deadlineAt = 0, announcedTurn = null;
 const multiplayer = () => state?.mode === "multiplayer";
 const viewerId = () => state?.viewer_id ?? 0;
 const heroPlayer = () => state.players.find((player) => player.id === viewerId());
@@ -76,13 +77,13 @@ function notify(message) {
   $("toast").textContent = message; $("toast").hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4200);
 }
-function playSound(result = false) {
+function playSound(kind = "action") {
   if (!sound) return;
   try {
     audioContext ??= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === "suspended") audioContext.resume();
+    if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
     const now = audioContext.currentTime;
-    (result ? [523,659,784] : [530]).forEach((frequency, index) => {
+    (kind === "win" ? [523,659,784] : kind === "turn" ? [660,880] : [530]).forEach((frequency, index) => {
       const oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
       const start = now + index * .1;
       oscillator.frequency.value = frequency; oscillator.type = "sine";
@@ -92,6 +93,37 @@ function playSound(result = false) {
       oscillator.start(start); oscillator.stop(start + .13);
     });
   } catch { /* Audio is optional. */ }
+}
+function acceptState(snapshot) {
+  state = snapshot;
+  deadlineAt = performance.now() + (state.room_info?.remaining_ms || 0);
+  const myTurn = state.phase === "playing" && state.actor_id === viewerId() && !state.room_info?.recovering;
+  const key = myTurn ? `${state.server_id}:${scope()}:${state.room_info?.round_id}:${state.hand_number}:${state.action_number}:${state.actor_id}` : null;
+  const newTurn = key !== null && key !== announcedTurn;
+  announcedTurn = key;
+  if (newTurn) playSound("turn");
+  return newTurn;
+}
+function renderCountdown() {
+  const paused = offline || state?.room_info?.recovering;
+  const seconds = Math.max(0, Math.ceil((deadlineAt - performance.now()) / 1000));
+  document.querySelectorAll("[data-turn-countdown]").forEach((badge) => {
+    const player = state?.players?.find((p) => p.id === Number(badge.dataset.turnCountdown));
+    const active = multiplayer() && state.phase === "playing" && player?.id === state.actor_id && player.strategy === "human";
+    badge.hidden = !active;
+    const running = active && !paused;
+    badge.textContent = running ? `${seconds}s` : "Ⅱ";
+    badge.setAttribute("aria-label", running ? `${player.name}剩余 ${seconds} 秒` : "等待重新连接");
+    badge.closest(".seat").classList.toggle("turn-urgent", running && seconds <= 5);
+  });
+}
+function renderStorage() {
+  const storage = state?.storage, label = $("save-status");
+  label.hidden = !storage;
+  label.textContent = storage?.enabled ? storage.ok ? "自动存档已开启" : "自动存档失败" : "本次未开启存档";
+  label.title = storage?.saved_at ? `最近保存：${new Date(storage.saved_at * 1000).toLocaleTimeString("zh-CN")}` : "";
+  $("save-error").hidden = !storage?.error;
+  $("save-error").textContent = storage?.error || "";
 }
 function hasModal() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
 function openDialog(id) { hidePrivateCards(); clearTimeout(botTimer); $(id).showModal(); }
@@ -113,19 +145,19 @@ async function request(route = "state", payload = null) {
     const response = await timedFetch(`/api/${route}`, {
       method: payload ? "POST" : "GET", cache:"no-store",
       headers: payload ? {"Content-Type":"application/json", "X-Poker-Client":"1"} : {},
-      body: payload ? JSON.stringify({...payload, version:state?.version, room_code:state?.room_info?.code, round_id:state?.room_info?.round_id}) : undefined,
+      body: payload ? JSON.stringify({...payload, server_id:state?.server_id, version:state?.version, room_code:state?.room_info?.code, round_id:state?.room_info?.round_id}) : undefined,
     });
     const data = await response.json();
-    if (data.state) state = data.state;
+    if (data.state) acceptState(data.state);
     if (!response.ok) {
       if ($("network-dialog").open) { $("network-error").textContent = data.error; $("network-error").hidden = false; }
       if (route === "new") { $("setup-error").textContent = data.error; $("setup-error").hidden = false; }
       else notify(data.error || "操作没有完成，请重试。");
     } else {
       const previousVersion = state?.version;
-      state = data; ok = true;
+      const newTurn = acceptState(data); ok = true;
       if (route === "room/leave") history.replaceState(null, "", location.pathname);
-      if (payload && route !== "new" && state.version !== previousVersion) playSound(state.result?.profit > 0);
+      if (!newTurn && payload && route !== "new" && state.version !== previousVersion) playSound(state.result?.profit > 0 ? "win" : "action");
     }
     offline = response.status >= 500;
     $("connection").hidden = !offline;
@@ -163,10 +195,10 @@ async function pollRoom() {
     if (!response.ok) throw new Error("Connection unavailable");
     const data = await response.json();
     if (busy || epoch !== mutationEpoch) return;
-    if (scope(data) === scope() && data.version < state.version) return;
+    if (data.server_id === state.server_id && scope(data) === scope() && data.version < state.version) return;
     const changed = data.version !== state.version;
-    state = data; offline = false; $("connection").hidden = true;
-    if (changed) playSound(state.result?.profit > 0);
+    const newTurn = acceptState(data); offline = false; $("connection").hidden = true;
+    if (changed && !newTurn) playSound(state.result?.profit > 0 ? "win" : "action");
     render();
   } catch {
     if (epoch !== mutationEpoch) return;
@@ -177,8 +209,8 @@ async function pollRoom() {
 }
 
 function renderSeats(players, current) {
-  const readyNames = new Set(multiplayer() && state.phase === "finished"
-    ? state.room_info.members.filter((member) => member.ready && member.needs_ready).map((member) => member.name)
+  const readyPlayers = new Set(multiplayer() && state.phase === "finished"
+    ? state.room_info.members.filter((member) => member.ready && member.needs_ready).map((member) => member.player_id)
     : []);
   const viewerIndex = players.findIndex((player) => player.id === viewerId());
   if (viewerIndex > 0) players = [...players.slice(viewerIndex), ...players.slice(0, viewerIndex)];
@@ -189,7 +221,7 @@ function renderSeats(players, current) {
   }
   players.forEach((player, index) => {
     const el = $("seats").children[index];
-    const ready = player.strategy === "human" && readyNames.has(player.name);
+    const ready = player.strategy === "human" && readyPlayers.has(player.id);
     el.className = `seat ${player.id === viewerId() ? "hero" : ""} ${player.id === current ? "active" : ""} ${player.folded ? "folded" : ""} ${player.eliminated ? "eliminated" : ""} ${player.is_winner ? "winner" : ""} ${ready ? "seat-ready" : ""}`;
     el.style.setProperty("--x", `${positions[index][0]}%`); el.style.setProperty("--y", `${positions[index][1]}%`);
     el.style.setProperty("--avatar", player.color);
@@ -211,15 +243,17 @@ function renderSeats(players, current) {
     holes.setAttribute("role", "group");
     holes.setAttribute("aria-label", `${player.name}的底牌${ownCards && privacy ? "，按住空格键查看" : ""}`);
     updateHTML(holes, cards);
-    updateHTML(el.querySelector(".seat-box"), `${player.is_winner ? `<span class="win-badge seat-win" title="赢得底池 ${fmt(player.won_amount)}">WIN</span>` : ""}<div class="seat-top"><span class="avatar" aria-hidden="true">${esc(player.avatar)}</span><div><div class="seat-name" title="${esc(player.name)}">${esc(player.name)}${player.id === viewerId() && player.name !== "你" ? " · 你" : ""}</div><div class="seat-style">${esc(player.style)}</div></div></div><div class="seat-money">${fmt(player.stack)}</div>${position ? `<span class="position ${position.includes("D") ? "dealer" : ""}" title="${esc(player.position)}">${esc(position)}</span>` : ""}`);
-    updateHTML(el.querySelector(".seat-action"), ready ? '<span class="ready-badge">✓ 已准备</span>' : esc(status));
+    updateHTML(el.querySelector(".seat-box"), `${player.is_winner ? `<span class="win-badge seat-win" title="赢得底池 ${fmt(player.won_amount)}">WIN</span>` : ""}<div class="seat-top"><span class="avatar-wrap"><span class="avatar" aria-hidden="true">${esc(player.avatar)}</span><span class="turn-countdown" data-turn-countdown="${player.id}" hidden></span></span><div><div class="seat-name" title="${esc(player.name)}">${esc(player.name)}${player.id === viewerId() && player.name !== "你" ? " · 你" : ""}</div><div class="seat-style">${esc(player.style)}</div></div></div><div class="seat-money">${fmt(player.stack)}</div>${position ? `<span class="position ${position.includes("D") ? "dealer" : ""}" title="${esc(player.position)}">${esc(position)}</span>` : ""}`);
+    updateHTML(el.querySelector(".seat-action"), ready ? `<span class="ready-badge"${!player.online ? ' title="已保留准备状态，等待重连"' : ""}>✓ 已准备${!player.online ? " · 离线" : ""}</span>` : esc(status));
     el.querySelector(".seat-bet").hidden = !player.bet;
     el.querySelector(".seat-bet").textContent = `◉ ${fmt(player.bet || 0)}`;
   });
   $("arena").dataset.count = players.length;
+  renderCountdown();
 }
 
 function render() {
+  renderStorage();
   renderPrivacy();
   if (state?.room_exit && departureSeen !== state.room_exit.code) {
     departureSeen = state.room_exit.code;
@@ -270,7 +304,7 @@ function render() {
 
 function renderControls() {
   if (state?.phase === "waiting") return;
-  const key = `${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}:${privacy}`;
+  const key = `${state?.server_id}:${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}:${privacy}:${state?.room_info?.waiting_message}`;
   if (key === lastControlsKey) return;
   lastControlsKey = key;
   const container = $("controls"), strength = $("hand-strength");
@@ -283,6 +317,12 @@ function renderControls() {
     $("join-table").onclick = showLobby; return;
   }
   const hero = heroPlayer(), disabled = busy || offline;
+  if (state.room_info?.recovering) {
+    $("turn-title").textContent = "牌局已恢复，等待重连";
+    $("turn-hint").textContent = `${state.room_info.waiting_message}。到齐后继续本手，重新计算思考时间。`;
+    updateHTML(container, '<div class="waiting">筹码和底牌已保留。无法回来的牌友，可由房主在房间信息中移出。</div>');
+    return;
+  }
   if (state.phase === "finished") {
     const result = state.result;
     $("turn-title").textContent = result.match_over ? result.hero_won_table ? "你是这一桌的最后赢家！" : "今晚这一桌，先到这里" : result.title;
@@ -298,7 +338,7 @@ function renderControls() {
       const room = state.room_info;
       $("next-hand").disabled = disabled || !room.can_ready;
       $("next-hand").textContent = !room.can_ready ? "继续观战" : room.ready ? "取消准备" : result.match_over ? "同意重新组桌" : "准备下一手";
-      $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码 · 已准备 ${room.ready_count}/${room.ready_total} · ${result.match_over ? "大家同意后返回等候室" : "全员准备后自动发牌"}`;
+      $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码 · 已准备 ${room.ready_count}/${room.ready_total} · ${room.waiting_message}`;
       $("next-hand").onclick = () => request(result.match_over ? "room/rematch" : "next", {ready:!room.ready});
     } else $("next-hand").onclick = result.match_over ? showLobby : () => request("next", {});
     return;
@@ -338,7 +378,7 @@ function setRaise(value) {
   $("raise-caption").textContent = `再投入 ${fmt(raiseTo - heroPlayer().bet)} 筹码`;
 }
 function confirmAllIn() {
-  pendingAllIn = {version:state.version, scope:scope()};
+  pendingAllIn = {server_id:state.server_id, version:state.version, scope:scope()};
   $("all-in-copy").textContent = `这会投入你剩下的 ${fmt(heroPlayer().stack)} 筹码。本手仍可能失利，确定就放手一搏。`;
   openDialog("all-in-dialog");
 }
@@ -376,23 +416,23 @@ function renderRoom() {
   if ($("invite-url").value !== room.join_url) $("invite-url").value = room.join_url;
   $("waiting-room").hidden = state.phase !== "waiting";
   const actor = state.players?.find((player) => player.id === state.actor_id);
-  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · ${state.phase === "waiting" ? "把邀请链接发给同一 Wi-Fi 下的朋友" : "已开局，暂不接受新玩家"}${actor?.strategy === "human" ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""}${room.notice ? ` · ${room.notice}` : ""}`;
+  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · ${state.phase === "waiting" ? "把邀请链接发给同一 Wi-Fi 下的朋友" : "已开局，暂不接受新玩家"}${actor?.strategy === "human" && !room.recovering ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""} · ${room.waiting_message || room.notice || "牌局进行中"}`;
   $("leave-room").disabled = busy;
   $("quick-leave-room").disabled = busy;
   const betweenHands = state.phase === "waiting" || state.phase === "finished";
   const readyText = `已准备 ${room.ready_count}/${room.ready_total}`;
   $("ready-count").textContent = betweenHands ? readyText : "";
-  $("table-ready-note").textContent = betweenHands ? `${readyText} · 全员确认后再继续` : "随时可以主动离桌，不用等待行动计时结束。";
+  $("table-ready-note").textContent = betweenHands ? `${readyText} · ${room.waiting_message}` : room.recovering ? room.waiting_message : "随时可以主动离桌，不用等待行动计时结束。";
   if ($("members-panel").dataset.phase !== state.phase) {
     $("members-panel").open = betweenHands;
     $("members-panel").dataset.phase = state.phase;
   }
-  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.online ? "在线" : "暂时离线"}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
+  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.online ? "在线" : "暂时离线"}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
   if (state.phase === "waiting") {
     $("heading").textContent = "朋友的牌桌"; $("hand-label").textContent = "等候开局";
     $("room-label").textContent = `房间 ${room.code}`;
     for (let i = room.members.length; i < room.capacity; i++) members.push(`<div class="room-member empty"><b>空座位</b><span>${room.fill_bots ? `开局由${esc(room.bot_style)} AI 补位` : "等待朋友加入"}</span></div>`);
-    $("waiting-note").textContent = `${room.members.length} 位朋友已入座 · 最多 ${room.capacity} 人${room.fill_bots ? " · 空位由 AI 补齐" : " · 至少两人即可开局"}。`;
+    $("waiting-note").textContent = `${room.members.length} 位朋友已入座 · 最多 ${room.capacity} 人${room.fill_bots ? " · 空位由 AI 补齐" : " · 至少两人即可开局"}。${room.waiting_message}。`;
     $("start-room").disabled = busy || offline || !room.can_start;
     $("start-room").textContent = room.ready ? "取消准备" : "我准备好了";
   }
@@ -499,7 +539,7 @@ document.querySelectorAll("dialog").forEach((dialog) => { dialog.addEventListene
 $("lobby").addEventListener("cancel", (event) => { if (!state || state.phase === "lobby" || busy) event.preventDefault(); });
 $("confirm-all-in").onclick = () => {
   closeDialog("all-in-dialog");
-  if (!pendingAllIn || state.version !== pendingAllIn.version || scope() !== pendingAllIn.scope) { notify("牌桌已经更新，请重新确认当前动作。"); return; }
+  if (!pendingAllIn || state.server_id !== pendingAllIn.server_id || state.version !== pendingAllIn.version || scope() !== pendingAllIn.scope) { notify("牌桌已经更新，请重新确认当前动作。"); return; }
   request("action", {kind:"all_in"});
 };
 $("setup-form").onsubmit = async (event) => {
@@ -588,4 +628,5 @@ if (document.modelContext?.registerTool) {
   window.addEventListener("pagehide", (event) => { if (!event.persisted) lifecycle.abort(); });
 }
 render();
+setInterval(renderCountdown, 250);
 request();

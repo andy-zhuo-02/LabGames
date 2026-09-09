@@ -14,7 +14,7 @@
     <a class="brand" href="/" aria-label="河牌俱乐部首页"><span class="brand-mark" aria-hidden="true">♠</span><span>河牌俱乐部<small>RIVER CLUB</small></span></a>
     <div class="table-label"><span class="live-dot"></span><span id="room-label">你的私人牌桌</span></div>
     <nav aria-label="游戏设置">
-      <button id="sound-button" class="quiet" aria-pressed="false" title="开启或关闭游戏音效">音效：关</button>
+      <button id="sound-button" class="quiet" aria-pressed="false" title="开启或关闭行动提醒与游戏音效">音效：关</button>
       <button id="privacy-button" class="quiet" aria-pressed="false" title="仅在本浏览器遮住自己的底牌，鼠标移入或按住查看">隐私：关</button>
       <button id="help-button" class="quiet">怎么玩</button>
       <button id="rankings-button" class="quiet">牌型大小</button>
@@ -26,6 +26,8 @@
   <main>
     <div class="game-heading"><div><p class="eyebrow">坐下来，打几手。</p><h1 id="heading">今晚的牌局</h1></div><div class="game-meta"><span id="hand-label">无限注德州扑克</span><span>盲注 <b>10 / 20</b></span></div></div>
     <div id="connection" class="connection" role="alert" hidden><span id="connection-message"></span><button id="retry-button" class="outline">重新连接</button></div>
+    <p id="save-status" class="save-status" hidden></p>
+    <p id="save-error" class="save-error" role="alert" hidden></p>
     <section id="room-panel" class="room-panel" aria-label="好友房间" hidden>
       <div class="room-bar"><div><span class="eyebrow">好友同桌</span><h2>房间 <span id="room-code"></span></h2></div><button id="leave-room" class="outline">离开牌桌</button></div>
       <div class="invite-row"><label><span class="sr-only">邀请朋友的链接</span><input id="invite-url" readonly></label><button id="copy-invite">复制邀请链接</button></div>

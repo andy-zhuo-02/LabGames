@@ -75,6 +75,7 @@ class Room:
     round_id: int = 1
     ready: set[str] = field(default_factory=set)
     banned: set[str] = field(default_factory=set)
+    recovering: bool = False
 
     def reset_ready(self):
         self.ready.clear()
@@ -88,7 +89,7 @@ class Room:
         return set(self.members)
 
     def arm_turn(self, now):
-        if self.game is None or self.game.table.hand.finished:
+        if self.recovering or self.game is None or self.game.table.hand.finished:
             self.turn_key, self.deadline = None, 0
             return
         hand = self.game.table.hand
@@ -106,12 +107,14 @@ class Room:
 
 
 class RoomRegistry:
-    def __init__(self, *, clock=time.monotonic):
+    def __init__(self, *, clock=time.monotonic, on_change=None):
         self.lock = threading.RLock()
         self.rooms = {}
         self.membership = {}
         self.departures = {}
         self.clock = clock
+        self.on_change = on_change
+        self._last_checkpoint = clock()
 
     def _room(self, sid):
         code = self.membership.get(sid)
@@ -163,6 +166,21 @@ class RoomRegistry:
             snapshot["version"] = room.version
             eligible = room.readiness_members()
             between_hands = room.game is None or room.game.table.hand.finished
+            connection_members = set(room.members) if room.recovering else eligible
+            waiting_connection = [member.name for token, member in room.members.items()
+                                  if token in connection_members and now - member.seen > ONLINE_SECONDS]
+            waiting_ready = [member.name for token, member in room.members.items()
+                             if token in eligible and token not in room.ready and now - member.seen <= ONLINE_SECONDS]
+            messages = []
+            if between_hands or room.recovering:
+                if waiting_connection:
+                    messages.append("等待 " + "、".join(waiting_connection) + " 重连")
+                if between_hands and waiting_ready:
+                    messages.append("等待 " + "、".join(waiting_ready) + " 准备")
+                if room.game is None and len(room.members) < 2 and not room.fill_bots:
+                    messages.append("至少两位玩家才能开局")
+                if not messages:
+                    messages.append("重连完成，即将恢复本手" if room.recovering else "大家已准备好，即将继续")
             can_ready = between_hands and sid in eligible and (sid in room.ready or room.game is not None or len(room.members) >= 2 or room.fill_bots)
             remaining = room.deadline
             if room.game and not room.game.table.hand.finished:
@@ -177,7 +195,9 @@ class RoomRegistry:
                 "can_start": room.game is None and can_ready,
                 "round_id": room.round_id, "can_ready": can_ready, "ready": sid in room.ready,
                 "ready_count": len(room.ready & eligible), "ready_total": len(eligible),
-                "members": [{"id": member.member_id, "name": member.name, "is_you": token == sid, "is_host": token == room.host,
+                "recovering": room.recovering, "waiting_message": "；".join(messages),
+                "waiting_for_connection": waiting_connection, "waiting_for_ready": waiting_ready if between_hands else [],
+                "members": [{"id": member.member_id, "player_id": member.player_id, "name": member.name, "is_you": token == sid, "is_host": token == room.host,
                              "online": now - member.seen <= ONLINE_SECONDS,
                              "ready": token in room.ready, "needs_ready": token in eligible,
                              "can_kick": sid == room.host and token != sid}
@@ -185,11 +205,18 @@ class RoomRegistry:
                 "turn_seconds": room.turn_seconds,
                 "disconnect_seconds": DISCONNECT_SECONDS,
                 "remaining_seconds": max(0, math.ceil(remaining - now)) if remaining else 0,
+                "remaining_ms": max(0, round((remaining - now) * 1000)) if remaining else 0,
                 "notice": room.notice,
             }
             return snapshot
 
     def perform(self, sid, route, payload):
+        with self.lock:
+            self._perform(sid, route, payload)
+            if self.on_change:
+                self.on_change(self)
+
+    def _perform(self, sid, route, payload):
         with self.lock:
             now = self.clock()
             if route == "room/create":
@@ -287,6 +314,8 @@ class RoomRegistry:
             elif route == "action":
                 if room.game is None:
                     raise Conflict("大家还没有全部准备好。")
+                if room.recovering:
+                    raise Conflict("本手已恢复，等待玩家重连后继续。")
                 player_id = room.members[sid].player_id
                 room.game.table.apply_action(player_id, Action(payload.get("kind"), payload.get("amount")))
             else:
@@ -352,6 +381,14 @@ class RoomRegistry:
         return True
 
     def tick(self):
+        with self.lock:
+            versions = {code: room.version for code, room in self.rooms.items()}
+            self._tick()
+            if self.on_change and (versions != {code: room.version for code, room in self.rooms.items()} or self.clock() - self._last_checkpoint >= 10):
+                self.on_change(self)
+                self._last_checkpoint = self.clock()
+
+    def _tick(self):
         """Called by the server, never dependent on any one player's browser."""
         with self.lock:
             now = self.clock()
@@ -368,6 +405,13 @@ class RoomRegistry:
                         room.host = replacement
                         room.notice = f"原房主暂时离线，{room.members[replacement].name} 接任房主。"
                         room.changed(now)
+                if room.recovering:
+                    if any(now - member.seen > ONLINE_SECONDS for member in room.members.values()):
+                        continue
+                    room.recovering = False
+                    room.turn_key = None
+                    room.notice = "玩家已重连，继续恢复的这一手。"
+                    room.changed(now)
                 if self._advance_if_ready(room, now):
                     room.changed(now)
                 if room.game is None or room.game.table.hand.finished:

@@ -201,6 +201,7 @@ class BrowserGame:
             "version": self.version, "phase": "finished" if hand.finished else "playing",
             "room": self.room, "hand_number": hand.hand_number,
             "street": observation.street, "street_name": STREET_NAMES[observation.street],
+            "action_number": len(hand.actions),
             "actor_id": hand.actor_id, "board": list(observation.board), "pot": observation.pot,
             "small_blind": table.config.small_blind, "big_blind": table.config.big_blind,
             "players": players, "legal": asdict(hand.legal_actions(viewer_id)), "hand_type": current_type,

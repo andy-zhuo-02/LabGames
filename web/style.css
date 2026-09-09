@@ -49,3 +49,12 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 #rankings-dialog .start-button{margin-top:18px}button.hand-strength{font-weight:400;min-height:36px}
 @media(max-width:600px){nav{flex-wrap:wrap}.ranking-row{gap:12px;padding:12px 0;flex-wrap:wrap}.ranking-row b{font-size:15px}.ranking-cards{--card-w:32px;--card-h:46px}.ranking-row p{font-size:12px}.table-exit-bar{align-items:flex-start}.table-exit-bar span{font-size:12px}.seat-win{font-size:10px!important;padding:0 5px;line-height:18px;top:-11px}}
 @media(max-width:600px){.topbar{flex-wrap:wrap;height:auto;min-height:106px;padding-top:12px;padding-bottom:10px}nav{width:100%;justify-content:flex-end}#sound-button{position:static;margin-right:auto}main{padding-top:16px}.game-meta{position:static;flex-wrap:wrap;justify-content:flex-end;max-width:150px}.room-panel{padding:16px;margin-top:18px}.invite-row{flex-wrap:wrap}.invite-row label{flex-basis:100%}.invite-row button{width:100%}.network-options{grid-template-columns:1fr;gap:14px}.network-options section{padding:16px}.room-members{grid-template-columns:1fr 1fr;gap:8px}.room-member{padding:12px}.waiting-footer{flex-direction:column;align-items:stretch}.waiting-footer button{width:100%}}
+
+.avatar-wrap{position:relative;display:inline-flex;flex-shrink:0}
+.turn-countdown{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);min-width:30px;padding:0 4px;border:1px solid var(--gold);border-radius:5px;background:#23312f;color:#ffe2a0;font-size:11px;font-weight:700;line-height:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.turn-countdown[hidden]{display:none}
+.seat.turn-urgent .turn-countdown{background:#842f36;border-color:#ffb4ac;color:#fff}
+.seat.turn-urgent .seat-box{border-color:#ff8e87;box-shadow:0 0 0 3px #ff8e8733}
+.seat.turn-urgent .seat-action{color:#ffb4ac}
+.save-status{font-size:12px;color:var(--muted);margin:0 0 10px}
+.save-error{border:1px solid #cf7972;background:#472c31;color:#ffd4ce;border-radius:9px;padding:12px;margin:0 0 14px}

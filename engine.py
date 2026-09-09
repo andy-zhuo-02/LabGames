@@ -131,6 +131,7 @@ class Hand:
             raise ValueError("牌堆必须包含 52 张不重复的标准扑克牌。")
         if deck is None:
             random.Random(seed).shuffle(cards)
+        self._initial_deck = tuple(map(repr, cards))
         # Deal explicitly so our own seeded deck is installed before any cards
         # are consumed. Other transitions/settlement remain automated.
         self._state = NoLimitTexasHoldem.create_state(
