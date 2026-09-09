@@ -1,0 +1,93 @@
+{
+  "status": "complete",
+  "seed": 42,
+  "table_seed": 586287033698423193,
+  "bot_seeds": {
+    "random": 2053695854357871005,
+    "tight": 13679192365072849617,
+    "loose": 4517457392071889495,
+    "nit": 2574020394472462046,
+    "calling_station": 1890702223848595625,
+    "maniac": 13662908291426823533,
+    "push_fold": 10060236952204337488,
+    "equity": 10892664235628797826
+  },
+  "pokerkit_version": "0.7.5",
+  "config": {
+    "small_blind": 10,
+    "big_blind": 20,
+    "starting_stack": 2000
+  },
+  "equity_samples": 128,
+  "hands_played": 252,
+  "total_chips": 16000,
+  "winner": "equity",
+  "ranking_rule": "同手淘汰并列，按仍存活人数加一记名次。",
+  "recording": "第 0 行为初始筹码，之后每手结算后记录；淘汰玩家持续记 0。",
+  "players": [
+    {
+      "player_id": 0,
+      "strategy": "random",
+      "final_stack": 0,
+      "peak_stack": 7100,
+      "eliminated_hand": 66,
+      "place": 4
+    },
+    {
+      "player_id": 1,
+      "strategy": "tight",
+      "final_stack": 0,
+      "peak_stack": 6072,
+      "eliminated_hand": 66,
+      "place": 4
+    },
+    {
+      "player_id": 2,
+      "strategy": "loose",
+      "final_stack": 0,
+      "peak_stack": 10185,
+      "eliminated_hand": 168,
+      "place": 3
+    },
+    {
+      "player_id": 3,
+      "strategy": "nit",
+      "final_stack": 0,
+      "peak_stack": 2070,
+      "eliminated_hand": 252,
+      "place": 2
+    },
+    {
+      "player_id": 4,
+      "strategy": "calling_station",
+      "final_stack": 0,
+      "peak_stack": 2000,
+      "eliminated_hand": 9,
+      "place": 7
+    },
+    {
+      "player_id": 5,
+      "strategy": "maniac",
+      "final_stack": 0,
+      "peak_stack": 4340,
+      "eliminated_hand": 8,
+      "place": 8
+    },
+    {
+      "player_id": 6,
+      "strategy": "push_fold",
+      "final_stack": 0,
+      "peak_stack": 2000,
+      "eliminated_hand": 45,
+      "place": 6
+    },
+    {
+      "player_id": 7,
+      "strategy": "equity",
+      "final_stack": 16000,
+      "peak_stack": 16000,
+      "eliminated_hand": null,
+      "place": 1
+    }
+  ]
+}
