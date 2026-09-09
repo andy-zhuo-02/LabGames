@@ -376,7 +376,7 @@ function renderRoom() {
   if ($("invite-url").value !== room.join_url) $("invite-url").value = room.join_url;
   $("waiting-room").hidden = state.phase !== "waiting";
   const actor = state.players?.find((player) => player.id === state.actor_id);
-  $("room-status").textContent = `房主：${room.host_name} · ${state.phase === "waiting" ? "把邀请链接发给同一 Wi-Fi 下的朋友" : "已开局，暂不接受新玩家"}${actor?.strategy === "human" ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""}${room.notice ? ` · ${room.notice}` : ""}`;
+  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · ${state.phase === "waiting" ? "把邀请链接发给同一 Wi-Fi 下的朋友" : "已开局，暂不接受新玩家"}${actor?.strategy === "human" ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""}${room.notice ? ` · ${room.notice}` : ""}`;
   $("leave-room").disabled = busy;
   $("quick-leave-room").disabled = busy;
   const betweenHands = state.phase === "waiting" || state.phase === "finished";
@@ -440,7 +440,7 @@ async function enterRoom(create) {
   if (!$("friend-name").reportValidity()) return;
   const name = $("friend-name").value.trim();
   $("network-error").hidden = true;
-  const payload = create ? {name, capacity:Number($("room-capacity").value), fill_bots:$("fill-bots").checked, bot_strategy:$("room-bot").value} : {name, code:$("join-code").value.trim().toUpperCase()};
+  const payload = create ? {name, capacity:Number($("room-capacity").value), turn_seconds:Number($("room-turn-seconds").value), fill_bots:$("fill-bots").checked, bot_strategy:$("room-bot").value} : {name, code:$("join-code").value.trim().toUpperCase()};
   if (await request(create ? "room/create" : "room/join", payload)) {
     prefs.set("name", name);
     history.replaceState(null, "", `/?room=${encodeURIComponent(state.room_info.code)}`);

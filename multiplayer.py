@@ -14,6 +14,7 @@ from engine import Action, GameConfig, Table
 
 
 TURN_SECONDS = 90
+TURN_OPTIONS = (15, 30, 60, 90, 120)
 ONLINE_SECONDS = 8
 DISCONNECT_SECONDS = 12
 HOST_TIMEOUT = 20
@@ -63,6 +64,7 @@ class Room:
     capacity: int
     fill_bots: bool
     bot_strategy: str
+    turn_seconds: int = TURN_SECONDS
     members: dict[str, Member] = field(default_factory=dict)
     game: BrowserGame | None = None
     version: int = 1
@@ -93,7 +95,7 @@ class Room:
         key = (hand.hand_number, len(hand.actions), hand.actor_id)
         if key != self.turn_key:
             self.turn_key = key
-            self.deadline = now + (BOT_DELAY if hand.actor_id in self.game.bots else TURN_SECONDS)
+            self.deadline = now + (BOT_DELAY if hand.actor_id in self.game.bots else self.turn_seconds)
 
     def changed(self, now):
         self.version += 1
@@ -180,7 +182,7 @@ class RoomRegistry:
                              "ready": token in room.ready, "needs_ready": token in eligible,
                              "can_kick": sid == room.host and token != sid}
                             for token, member in room.members.items()],
-                "turn_seconds": TURN_SECONDS,
+                "turn_seconds": room.turn_seconds,
                 "disconnect_seconds": DISCONNECT_SECONDS,
                 "remaining_seconds": max(0, math.ceil(remaining - now)) if remaining else 0,
                 "notice": room.notice,
@@ -197,14 +199,17 @@ class RoomRegistry:
                 capacity = payload.get("capacity", 4)
                 fill = payload.get("fill_bots", True)
                 style = payload.get("bot_strategy", "calling_station")
+                turn_seconds = payload.get("turn_seconds", TURN_SECONDS)
                 if type(capacity) is not int or not 2 <= capacity <= 6:
                     raise ValueError("好友房支持 2 至 6 个座位。")
                 if type(fill) is not bool or not isinstance(style, str) or style not in STRATEGIES:
                     raise ValueError("请选择有效的 AI 补位设置。")
+                if type(turn_seconds) is not int or turn_seconds not in TURN_OPTIONS:
+                    raise ValueError("思考时间请选择 15、30、60、90 或 120 秒。")
                 if len(self.rooms) >= 64:
                     raise Conflict("当前房间太多，请稍后再试。")
                 code = self._new_code()
-                room = Room(code, sid, capacity, fill, style, last_seen=now)
+                room = Room(code, sid, capacity, fill, style, turn_seconds=turn_seconds, last_seen=now)
                 room.members[sid] = Member(name, now)
                 self.rooms[code], self.membership[sid] = room, code
                 self.departures.pop(sid, None)
@@ -386,6 +391,6 @@ class RoomRegistry:
                     action = Action("check" if observation.legal.check else "fold")
                     room.game.table.apply_action(actor, action)
                     label = "过牌" if action.kind == "check" else "弃牌"
-                    reason = f"离线超过 {DISCONNECT_SECONDS} 秒" if disconnected else f"超过 {TURN_SECONDS} 秒未操作"
+                    reason = f"离线超过 {DISCONNECT_SECONDS} 秒" if disconnected else f"超过 {room.turn_seconds} 秒未操作"
                     room.notice = f"{room.game.table.players[actor].name} {reason}，自动{label}。"
                 room.changed(now)

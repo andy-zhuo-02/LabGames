@@ -10,7 +10,7 @@ from unittest.mock import patch
 from bots import passive_action
 from browser_game import BrowserGame, Conflict
 from engine import Action, GameConfig, IllegalAction, Table
-from multiplayer import BOT_DELAY, DISCONNECT_SECONDS, HOST_TIMEOUT, TURN_SECONDS, RoomRegistry
+from multiplayer import BOT_DELAY, DISCONNECT_SECONDS, HOST_TIMEOUT, TURN_OPTIONS, TURN_SECONDS, RoomRegistry
 from web_app import PokerServer
 
 
@@ -73,6 +73,46 @@ class RoomTests(unittest.TestCase):
             self.join("fifth")
         with self.assertRaises(Conflict):
             self.registry.perform("host", "room/create", {"name": "another room"})
+
+    def test_turn_time_defaults_and_invalid_choices_do_not_create_rooms(self):
+        self.assertEqual(self.registry.snapshot("host")["room_info"]["turn_seconds"], 90)
+        for value in (None, True, False, "30", 30.0, 0, -1, 10, 300, [], {}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.registry.perform("invalid", "room/create", {"name": "无效", "turn_seconds": value})
+            self.assertFalse(self.registry.contains("invalid"))
+            self.assertEqual(len(self.registry.rooms), 1)
+
+    def test_each_turn_time_is_enforced_and_survives_next_hand_and_host_transfer(self):
+        for seconds in TURN_OPTIONS:
+            with self.subTest(seconds=seconds):
+                self.registry = RoomRegistry(clock=self.clock)
+                self.registry.perform("host", "room/create", {"name": "房主", "capacity": 2, "fill_bots": False, "turn_seconds": seconds})
+                self.code = self.registry.membership["host"]
+                self.join("friend")
+                self.start()
+                room = self.registry.rooms[self.code]
+                for sid in ("host", "friend"):
+                    self.assertEqual(self.registry.snapshot(sid)["room_info"]["turn_seconds"], seconds)
+                self.assertEqual(room.deadline - self.clock(), seconds)
+                self.clock.advance(seconds - 1)
+                for sid in ("host", "friend"):
+                    self.registry.snapshot(sid)  # Keep both online; exercise the turn clock.
+                self.registry.tick()
+                self.assertFalse(room.game.table.hand.finished)
+                self.assertEqual(self.registry.snapshot("friend")["room_info"]["remaining_seconds"], 1)
+                self.clock.advance(1)
+                self.registry.tick()
+                self.assertTrue(room.game.table.hand.finished)
+                self.assertEqual(room.game.table.hand.actions[-1].action.kind, "fold")
+                self.assertEqual(room.game.table.hand.actions[-1].paid, 0)
+                self.assertIn(f"超过 {seconds} 秒未操作", room.notice)
+                self.prepare_all("next")
+                self.assertEqual(room.game.table.hand_number, 2)
+                self.assertEqual(room.deadline - self.clock(), seconds)
+                self.command("host", "room/leave")
+                self.assertTrue(self.registry.snapshot("friend")["room_info"]["is_host"])
+                self.assertEqual(self.registry.snapshot("friend")["room_info"]["turn_seconds"], seconds)
+                self.assertAlmostEqual(room.deadline - self.clock(), BOT_DELAY)
 
     def test_session_identity_cannot_be_overridden_and_versions_are_required(self):
         self.join("friend")
@@ -145,11 +185,12 @@ class RoomTests(unittest.TestCase):
 
     def test_bot_moves_once_on_server_without_any_client_step(self):
         self.command("host", "room/leave")
-        self.registry.perform("host", "room/create", {"name": "房主", "capacity": 3, "fill_bots": True})
+        self.registry.perform("host", "room/create", {"name": "房主", "capacity": 3, "fill_bots": True, "turn_seconds": 120})
         self.code = self.registry.membership["host"]
         self.join("friend")
         self.start()
         before = self.registry.snapshot("host")
+        self.assertEqual(before["room_info"]["turn_seconds"], 120)
         self.assertEqual(before["actor_id"], 2)
         self.registry.tick()
         self.assertEqual(self.registry.snapshot("host")["version"], before["version"])
@@ -310,9 +351,13 @@ class RoomTests(unittest.TestCase):
         self.assertFalse(self.registry.snapshot("host")["room_info"]["can_start"])
 
     def test_disconnection_does_not_wait_for_full_turn_and_reconnection_keeps_seat(self):
+        self.command("host", "room/leave")
+        self.registry.perform("host", "room/create", {"name": "房主", "fill_bots": False, "turn_seconds": 120})
+        self.code = self.registry.membership["host"]
         self.join("friend")
         self.start()
         room = self.registry.rooms[self.code]
+        self.assertEqual(room.deadline - self.clock(), 120)
         self.clock.advance(DISCONNECT_SECONDS - 1)
         self.registry.snapshot("host")
         self.registry.tick()
@@ -407,6 +452,9 @@ class RoomTests(unittest.TestCase):
 
     def test_rematch_returns_to_lobby_and_keeps_member_identities(self):
         from test_poker import fixed_deck
+        self.command("host", "room/leave")
+        self.registry.perform("host", "room/create", {"name": "房主", "fill_bots": False, "turn_seconds": 60})
+        self.code = self.registry.membership["host"]
         self.join("friend")
         self.start()
         room = self.registry.rooms[self.code]
@@ -418,9 +466,11 @@ class RoomTests(unittest.TestCase):
         self.assertEqual(self.registry.snapshot("friend")["phase"], "finished")
         self.command("host", "room/rematch")
         self.assertEqual(self.registry.snapshot("friend")["phase"], "waiting")
+        self.assertEqual(self.registry.snapshot("friend")["room_info"]["turn_seconds"], 60)
         self.join("third")
         self.start()
         self.assertEqual(self.registry.snapshot("friend")["viewer_id"], 1)
+        self.assertEqual(room.deadline - self.clock(), 60)
         self.assertEqual(sum(player["stack"] for player in self.registry.snapshot("friend")["players"]) + 30, 6000)
 
 
@@ -464,12 +514,14 @@ class MultiplayerHTTPTests(unittest.TestCase):
         self.thread.join(timeout=2)
 
     def test_two_devices_join_play_refresh_and_leave(self):
-        status, room = self.host.request("room/create", {"name": "Alice", "capacity": 2, "fill_bots": False})
+        status, room = self.host.request("room/create", {"name": "Alice", "capacity": 2, "fill_bots": False, "turn_seconds": 30})
         self.assertEqual(status, 200)
+        self.assertEqual(room["room_info"]["turn_seconds"], 30)
         code = room["room_info"]["code"]
         self.assertIn(f"192.168.1.20:{self.server.server_port}", room["room_info"]["join_url"])
         status, room = self.friend.request("room/join", {"name": "Bob", "code": code.lower()})
         self.assertEqual(status, 200)
+        self.assertEqual(room["room_info"]["turn_seconds"], 30)
         self.assertNotEqual(self.host.cookie, self.friend.cookie)
         self.assertEqual(self.host.command("room/start")[0], 200)
         self.assertEqual(self.host.request()[1]["phase"], "waiting")
