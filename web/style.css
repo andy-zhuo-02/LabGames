@@ -32,6 +32,11 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 .network-options label.checkbox-label{flex-direction:row;align-items:center;gap:8px}.checkbox-label input{width:17px;height:17px;accent-color:var(--gold)}
 #join-code{letter-spacing:4px;text-transform:uppercase}#room-timer{color:var(--gold)}
 .win-badge{display:inline-block!important;color:#233a29!important;background:var(--gold);border:1px solid #f7dfaa;border-radius:5px;padding:1px 7px;font-size:11px!important;font-weight:800;letter-spacing:1px;line-height:20px}
+.private-front,.private-back{display:flex;gap:inherit}.private-back,.privacy-cover{display:none}
+.private-cards{width:max-content;max-width:100%;margin-left:auto;margin-right:auto;border-radius:6px}.showdown-cards.private-cards{margin-left:0;margin-right:0}
+.private-cards .card{animation:none}.privacy-mode .private-cards{cursor:help;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.privacy-mode .private-cards:focus-visible{outline:2px solid var(--gold);outline-offset:5px}
+.privacy-mode:not(.peeking) .private-front,.privacy-mode:not(.peeking) .private-detail{display:none}.privacy-mode:not(.peeking) .private-back{display:flex}.privacy-mode:not(.peeking) .privacy-cover{display:inline}
+#privacy-button[aria-pressed="true"]{color:var(--gold);background:#e8cb8714}.privacy-hint{font-size:13px;color:var(--gold);margin:-5px 0 15px}
 .seat-win{position:absolute;top:-14px;left:8px;box-shadow:0 2px 7px #0004}.seat.winner .seat-box{border-color:var(--gold);box-shadow:0 0 0 2px #e8cb8722,0 6px 15px #0003}
 .table-exit-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--border);margin-top:18px;padding-top:14px}.table-exit-bar span{font-size:13px;color:var(--muted)}.table-exit-bar button{white-space:nowrap;font-size:14px}
 #members-panel{border-top:1px solid var(--border);margin-top:16px;padding-top:14px}#members-panel summary{cursor:pointer;font-size:14px}#ready-count{color:var(--gold);float:right}

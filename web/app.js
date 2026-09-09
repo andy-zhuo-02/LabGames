@@ -24,6 +24,8 @@ const POSITIONS = {
 let state = null, busy = false, offline = false, botTimer = null, toastTimer = null;
 let raiseTo = 0, raiseVersion = -1, audioContext = null;
 let sound = prefs.get("sound", "off") === "on";
+let privacy = prefs.get("privacy", "off") === "on";
+let peekTarget = null, peekPointer = null, privacyContext = null;
 let pollTimer = null, polling = false, mutationEpoch = 0, lastControlsKey = null, pendingAllIn = null;
 let pendingKick = null, departureSeen = null;
 const multiplayer = () => state?.mode === "multiplayer";
@@ -40,7 +42,35 @@ function card(code, hidden = false) {
   return `<span class="card ${"hd".includes(code[1]) ? "red" : ""}" role="img" aria-label="${esc(suitName + rank)}"><span class="rank">${esc(rank)}</span><span class="suit">${suit}</span><span class="large-suit" aria-hidden="true">${suit}</span></span>`;
 }
 
-function updateHTML(element, html) { if (element.innerHTML !== html) element.innerHTML = html; }
+function privateCards(codes) {
+  return `<span class="private-front">${codes.map((code) => card(code)).join("")}</span><span class="private-back">${card(null, true).repeat(codes.length)}</span>`;
+}
+function hidePrivateCards() {
+  document.body.classList.remove("peeking");
+  peekTarget = null; peekPointer = null;
+}
+function peekCards(target, pointer = null) {
+  if (!privacy || !target?.classList.contains("private-cards") || document.hidden || !document.hasFocus() || hasModal()) return;
+  peekTarget = target; peekPointer = pointer;
+  document.body.classList.add("peeking");
+}
+function renderPrivacy() {
+  const hero = state?.players?.find((player) => player.id === viewerId());
+  const context = `${scope()}:${viewerId()}:${state?.hand_number}:${state?.phase}:${hero?.cards.join(",")}`;
+  // Room polling must not reopen cards; a new hand always starts face down.
+  if (context !== privacyContext || (peekTarget && !peekTarget.isConnected)) hidePrivateCards();
+  privacyContext = context;
+  document.body.classList.toggle("privacy-mode", privacy);
+  $("privacy-button").textContent = `隐私：${privacy ? "开" : "关"}`;
+  $("privacy-button").setAttribute("aria-pressed", String(privacy));
+  $("privacy-hint").hidden = !privacy || !hero?.cards.length;
+}
+function updateHTML(element, html) {
+  if (element.innerHTML !== html) {
+    if (peekTarget && element.contains(peekTarget)) hidePrivateCards();
+    element.innerHTML = html;
+  }
+}
 function notify(message) {
   $("toast").textContent = message; $("toast").hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4200);
@@ -63,7 +93,7 @@ function playSound(result = false) {
   } catch { /* Audio is optional. */ }
 }
 function hasModal() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
-function openDialog(id) { clearTimeout(botTimer); $(id).showModal(); }
+function openDialog(id) { hidePrivateCards(); clearTimeout(botTimer); $(id).showModal(); }
 function closeDialog(id) { $(id).close(); scheduleBot(); }
 
 async function timedFetch(url, options = {}, timeout = 20000) {
@@ -167,10 +197,14 @@ function renderSeats(players, current) {
       else if (!player.eliminated && state.result.end_reason === "folds") status = "无需摊牌";
     }
     const position = player.position.includes("BTN") ? player.position === "BTN/SB" ? "D / SB" : "D" : player.position;
-    const cards = player.eliminated && !player.cards.length ? "" : player.cards.length ? player.cards.map((c) => card(c)).join("") : card(null,true).repeat(2);
+    const ownCards = player.id === viewerId() && player.cards.length > 0;
+    const cards = player.eliminated && !player.cards.length ? "" : ownCards ? privateCards(player.cards) : player.cards.length ? player.cards.map((c) => card(c)).join("") : card(null,true).repeat(2);
     if (!el.children.length) el.innerHTML = '<div class="hole-cards"></div><div class="seat-box"></div><div class="seat-action"></div><span class="seat-bet"></span>';
     const holes = el.querySelector(".hole-cards");
-    holes.setAttribute("aria-label", `${player.name}的底牌`);
+    holes.classList.toggle("private-cards", ownCards);
+    holes.tabIndex = ownCards && privacy ? 0 : -1;
+    holes.setAttribute("role", "group");
+    holes.setAttribute("aria-label", `${player.name}的底牌${ownCards && privacy ? "，按住空格键查看" : ""}`);
     updateHTML(holes, cards);
     updateHTML(el.querySelector(".seat-box"), `${player.is_winner ? `<span class="win-badge seat-win" title="赢得底池 ${fmt(player.won_amount)}">WIN</span>` : ""}<div class="seat-top"><span class="avatar" aria-hidden="true">${esc(player.avatar)}</span><div><div class="seat-name" title="${esc(player.name)}">${esc(player.name)}${player.id === viewerId() && player.name !== "你" ? " · 你" : ""}</div><div class="seat-style">${esc(player.style)}</div></div></div><div class="seat-money">${fmt(player.stack)}</div>${position ? `<span class="position ${position.includes("D") ? "dealer" : ""}" title="${esc(player.position)}">${esc(position)}</span>` : ""}`);
     el.querySelector(".seat-action").textContent = status;
@@ -181,6 +215,7 @@ function renderSeats(players, current) {
 }
 
 function render() {
+  renderPrivacy();
   if (state?.room_exit && departureSeen !== state.room_exit.code) {
     departureSeen = state.room_exit.code;
     history.replaceState(null, "", location.pathname);
@@ -230,12 +265,12 @@ function render() {
 
 function renderControls() {
   if (state?.phase === "waiting") return;
-  const key = `${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}`;
+  const key = `${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}:${privacy}`;
   if (key === lastControlsKey) return;
   lastControlsKey = key;
   const container = $("controls"), strength = $("hand-strength");
   strength.hidden = !state?.hand_type;
-  strength.textContent = state?.hand_type ? `当前牌型 · ${state.hand_type}` : "";
+  updateHTML(strength, state?.hand_type ? `<span class="private-detail">当前牌型 · ${esc(state.hand_type)}</span><span class="privacy-cover">底牌已隐藏</span>` : "");
   if (!state || state.phase === "lobby") {
     $("turn-title").textContent = offline ? "等待连接" : "你的座位已经留好";
     $("turn-hint").textContent = "选几个合拍的牌友，开始今晚的第一手。";
@@ -248,7 +283,10 @@ function renderControls() {
     $("turn-title").textContent = result.match_over ? result.hero_won_table ? "你是这一桌的最后赢家！" : "今晚这一桌，先到这里" : result.title;
     $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码${result.match_over && hero.stack === 0 ? " · 重新开桌，就能再来一局" : " · 按你的节奏，准备好了再发牌"}`;
     const payouts = result.payouts.map((p) => `${esc(p.label)}：${p.awards.map((a) => `${esc(a.name)} +${fmt(a.amount)}`).join("、")}`).join("<br>");
-    const hands = result.shown_hands.map((h) => `<div class="showdown-hand"><div class="showdown-cards" aria-label="${esc(h.name)}的摊牌">${h.cards.map((code) => card(code)).join("")}</div><div class="showdown-player"><b title="${esc(h.name)}">${esc(h.name)}</b>${result.winner_ids?.includes(h.player_id) ? '<span class="win-badge">WIN</span> ' : ""}<span>${esc(h.hand_type)}</span></div></div>`).join("");
+    const hands = result.shown_hands.map((h) => {
+      const own = h.player_id === viewerId();
+      return `<div class="showdown-hand"><div class="showdown-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} role="group" aria-label="${esc(h.name)}的摊牌${own && privacy ? "，按住空格键查看" : ""}">${own ? privateCards(h.cards) : h.cards.map((code) => card(code)).join("")}</div><div class="showdown-player"><b title="${esc(h.name)}">${esc(h.name)}</b>${result.winner_ids?.includes(h.player_id) ? '<span class="win-badge">WIN</span> ' : ""}<span class="${own ? "private-detail" : ""}">${esc(h.hand_type)}</span>${own ? '<span class="privacy-cover">底牌已隐藏</span>' : ""}</div></div>`;
+    }).join("");
     const returns = result.returned_bets.map((bet) => `${esc(bet.name)}退回 ${fmt(bet.amount)}`).join("、");
     updateHTML(container, `<div class="result-row"><div class="result-detail"><p>${payouts}</p>${returns ? `<p class="muted">未被跟注：${returns}</p>` : ""}</div><button id="next-hand" class="primary" ${disabled ? "disabled" : ""}>${result.match_over ? "再开一桌" : "下一手 →"}</button></div><p class="result-explanation">${esc(result.explanation || "本手已结算，以下为已亮出的底牌。")}</p>${hands ? `<section class="showdown-list" aria-label="本手摊牌对比">${hands}</section>` : ""}`);
     if (multiplayer()) {
@@ -364,6 +402,8 @@ function renderRoom() {
 }
 
 function showRankings() {
+  hidePrivateCards();
+  const currentType = privacy ? "" : state?.hand_type;
   const ranks = [
     ["同花顺", "As Ks Qs Js Ts", "同花色，五张连续点数"],
     ["四条", "9s 9h 9d 9c As", "四张相同点数"],
@@ -375,7 +415,7 @@ function showRankings() {
     ["一对", "As Ah Kd 8c 3s", "一组对子"],
     ["高牌", "As Jh 8d 5c 2s", "没有以上组合，依次比点数"],
   ];
-  $("rankings-list").innerHTML = ranks.map(([name,cards,note], i) => `<div class="ranking-row ${state?.hand_type === name ? "current-ranking" : ""}"><div><b>${i + 1}. ${name}${state?.hand_type === name ? " · 当前" : ""}</b><p>${note}</p></div><div class="ranking-cards">${cards.split(" ").map((code) => card(code)).join("")}</div></div>`).join("");
+  $("rankings-list").innerHTML = ranks.map(([name,cards,note], i) => `<div class="ranking-row ${currentType === name ? "current-ranking" : ""}"><div><b>${i + 1}. ${name}${currentType === name ? " · 当前" : ""}</b><p>${note}</p></div><div class="ranking-cards">${cards.split(" ").map((code) => card(code)).join("")}</div></div>`).join("");
   openDialog("rankings-dialog");
 }
 
@@ -442,6 +482,11 @@ $("confirm-kick").onclick = async () => {
 $("retry-button").onclick = () => request();
 $("pace").onchange = () => { prefs.set("pace", $("pace").value); scheduleBot(); };
 $("sound-button").onclick = () => { sound = !sound; prefs.set("sound", sound ? "on" : "off"); playSound(); render(); };
+$("privacy-button").onclick = () => {
+  hidePrivateCards();
+  privacy = !privacy; prefs.set("privacy", privacy ? "on" : "off");
+  render();
+};
 $("player-count").onchange = populateOpponents;
 document.querySelectorAll('input[name="room"]').forEach((input) => { input.onchange = populateOpponents; });
 document.querySelectorAll("[data-close]").forEach((button) => { button.onclick = () => closeDialog(button.dataset.close); });
@@ -464,10 +509,53 @@ $("setup-form").onsubmit = async (event) => {
   }
 };
 document.addEventListener("visibilitychange", () => {
+  hidePrivateCards();
   clearTimeout(botTimer);
   if (multiplayer()) { if (!document.hidden) pollRoom(); }
   else if (!document.hidden && !busy && !hasModal()) request();
 });
+
+// Actual movement avoids reopening cards when polling replaces DOM under a still cursor.
+// Reveal only while hovering or holding; never latch open after a click or tap.
+document.addEventListener("pointermove", (event) => {
+  const target = event.target.closest(".private-cards");
+  if (event.pointerType === "mouse") {
+    if (target) peekCards(target);
+    else if (peekPointer === null) hidePrivateCards();
+  } else if (peekTarget && event.pointerId === peekPointer) {
+    const rect = peekTarget.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) hidePrivateCards();
+  }
+});
+document.addEventListener("pointerout", (event) => {
+  if (peekTarget && !peekTarget.contains(event.relatedTarget)) hidePrivateCards();
+});
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target.closest(".private-cards");
+  if (!privacy || !target || event.pointerType === "mouse" || !event.isPrimary) return;
+  event.preventDefault();
+  peekCards(target, event.pointerId);
+  target.setPointerCapture(event.pointerId);
+});
+for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) {
+  document.addEventListener(name, (event) => { if (event.pointerId === peekPointer) hidePrivateCards(); });
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hidePrivateCards();
+  const target = event.target.closest(".private-cards");
+  if (privacy && target && [" ", "Enter"].includes(event.key)) {
+    event.preventDefault();
+    if (!event.repeat) peekCards(target);
+  }
+});
+document.addEventListener("keyup", (event) => { if ([" ", "Enter"].includes(event.key)) hidePrivateCards(); });
+document.addEventListener("focusout", (event) => { if (peekTarget?.contains(event.target)) hidePrivateCards(); });
+document.addEventListener("scroll", hidePrivateCards, true);
+document.addEventListener("contextmenu", (event) => {
+  if (privacy && event.target.closest(".private-cards")) { event.preventDefault(); hidePrivateCards(); }
+});
+window.addEventListener("blur", hidePrivateCards);
+window.addEventListener("pagehide", hidePrivateCards);
 
 // Optional page tools use the exact public view shown to the player.
 if (document.modelContext?.registerTool) {

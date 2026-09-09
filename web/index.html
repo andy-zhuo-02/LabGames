@@ -15,6 +15,7 @@
     <div class="table-label"><span class="live-dot"></span><span id="room-label">你的私人牌桌</span></div>
     <nav aria-label="游戏设置">
       <button id="sound-button" class="quiet" aria-pressed="false" title="开启或关闭游戏音效">音效：关</button>
+      <button id="privacy-button" class="quiet" aria-pressed="false" title="仅在本浏览器遮住自己的底牌，鼠标移入或按住查看">隐私：关</button>
       <button id="help-button" class="quiet">怎么玩</button>
       <button id="rankings-button" class="quiet">牌型大小</button>
       <button id="friends-button" class="outline">和朋友玩</button>
@@ -46,6 +47,7 @@
         </div>
         <section class="action-dock" aria-label="你的操作">
           <div class="turn-header"><div><p id="turn-title" class="turn-title" role="status" tabindex="-1">正在准备牌桌…</p><p id="turn-hint" class="muted">每人 2,000 筹码，从容开始。</p></div><button id="hand-strength" class="hand-strength" aria-haspopup="dialog" title="查看牌型大小" hidden></button></div>
+          <p id="privacy-hint" class="privacy-hint" hidden>隐私模式 · 鼠标移到底牌查看，触屏按住查看；松开或移开即隐藏。</p>
           <div id="controls"></div>
           <div id="table-exit-bar" class="table-exit-bar" hidden><span id="table-ready-note"></span><button id="quick-leave-room" class="outline">离开牌桌</button></div>
         </section>
@@ -84,6 +86,7 @@
     <div class="help-box"><h3>什么时候会亮底牌？</h3><p>这张休闲牌桌在摊牌时，会亮出所有未弃牌玩家的底牌，包括输掉本手的玩家。中途弃牌的底牌不公开。</p><p class="muted">如果其他人都弃牌，最后留下的玩家直接赢得底池，无需亮牌。即使五张公共牌都已发完，也可能这样结束。</p></div>
     <div class="help-box"><h3>牌型从大到小</h3><p>同花顺 › 四条 › 葫芦 › 同花 › 顺子 › 三条 › 两对 › 一对 › 高牌</p><p class="muted">A 可作最大点数，也可以在 A–2–3–4–5 中作最小点数。四种花色大小相同。</p></div>
     <div class="help-box"><h3>看懂桌上的标记</h3><p><b>D / BTN</b> 庄家位置，每手轮换 · <b>SB</b> 小盲 · <b>BB</b> 大盲</p><p class="muted">“加到 100”指本轮总下注到 100。按钮旁会标明还需投入多少。你的“当前牌型”只是已发牌面的组合，并不代表一定能赢。</p></div>
+    <div class="help-box"><h3>防止身边的人看到底牌</h3><p>开启顶部“隐私”后，自己的底牌显示为牌背，鼠标移入才亮牌；触屏按住查看，键盘可用 Tab 选中底牌后按住空格键查看。松开、移开或切走窗口会收起牌面。</p><p class="muted">设置保存在本浏览器中，结算区自己的底牌和当前牌型也会遮住。正常摊牌时，其他玩家仍会按规则看到已公开的牌。</p></div>
     <button class="primary start-button" data-close="help">明白了，回牌桌</button>
   </dialog>
 
