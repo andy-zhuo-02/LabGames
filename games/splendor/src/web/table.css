@@ -1,0 +1,484 @@
+/* Tabletop colors: use substantial color surfaces, not thin tinted outlines. */
+:root {
+  --white: #fffef6;
+  --blue: #0967d5;
+  --green: #169744;
+  --red: #d52b38;
+  --black: #181a20;
+}
+.white {
+  --gem-ink: #242931;
+  --gem-edge: #aeb7b9;
+}
+.blue,
+.green,
+.red {
+  --gem-ink: #fff;
+  --gem-edge: #ffffff90;
+}
+.black {
+  --gem-ink: #fff;
+  --gem-edge: #aeb7b9;
+}
+.gold {
+  --gem-ink: #372609;
+  --gem-edge: #fae4a2;
+}
+.gem-symbol {
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+  user-select: none;
+  filter: drop-shadow(0 1px 1px #0005);
+}
+.deck-symbol .gem-symbol {
+  transform: rotate(-45deg);
+}
+.bank-token:disabled .token-disc {
+  box-shadow: none;
+}
+.costs {
+  gap: 7px;
+}
+.costs .gem-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gem);
+  color: var(--gem-ink);
+  border: 1px solid var(--gem-edge);
+  width: 29px;
+  height: 29px;
+  min-width: 29px;
+  border-radius: 50%;
+  font:
+    700 19px/1 system-ui,
+    sans-serif;
+  box-shadow: 0 1px 3px #0004;
+}
+.costs .gem-count b {
+  font-weight: 750;
+}
+.costs .gem-count .gem-symbol {
+  display: none;
+}
+.market-row {
+  grid-template-columns: 58px repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 830px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.development-card {
+  padding: 0;
+  min-height: 0;
+  height: auto;
+  aspect-ratio: 630 / 880;
+  border: 4px solid var(--gem);
+  border-radius: 9px;
+  background: linear-gradient(150deg, #f3eedc, #d6d0bb);
+  box-shadow: 0 4px 8px #0005;
+  isolation: isolate;
+}
+.development-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 30%;
+  background: var(--gem);
+  border-bottom: 2px solid #0002;
+  z-index: -1;
+}
+.development-card:hover {
+  border-color: var(--gem);
+  transform: translateY(-3px);
+}
+.development-card.affordable {
+  border-color: var(--gem);
+  box-shadow:
+    0 0 0 2px #ffe49a,
+    0 4px 10px #0005;
+}
+.original-card-art {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 2;
+  opacity: 0;
+}
+.has-art .original-card-art {
+  opacity: 1;
+}
+.has-art .card-head,
+.has-art .card-center,
+.has-art .card-foot {
+  visibility: hidden;
+}
+.has-art::before {
+  display: none;
+}
+.has-art {
+  background: #1d2420;
+}
+.has-art .afford-dot {
+  z-index: 3;
+}
+.development-card .card-head {
+  padding: 8px 10px;
+  align-items: flex-start;
+}
+.development-card .prestige {
+  color: var(--gem-ink);
+  font:
+    700 38px/1 Georgia,
+    serif;
+  text-shadow: 0 1px 2px #0003;
+}
+.card-bonus {
+  width: 40px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+}
+.card-bonus .gem-symbol {
+  width: 36px;
+  height: 36px;
+}
+.development-card .card-center {
+  opacity: 1;
+  position: absolute;
+  inset: 34% 10% 15% 35%;
+}
+.development-card .card-center > .gem-symbol {
+  position: static;
+  width: 65px;
+  height: 65px;
+  opacity: 0.8;
+}
+.development-card .card-foot {
+  position: absolute;
+  left: 10px;
+  bottom: 11px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.development-card .card-foot .costs {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+.development-card .card-foot .gem-count {
+  width: 29px;
+  height: 29px;
+  min-width: 29px;
+  font-size: 19px;
+}
+.afford-dot {
+  width: 9px;
+  height: 9px;
+  right: 6px;
+  top: auto;
+  bottom: 7px;
+  background: #ffe49a;
+  box-shadow: 0 0 0 2px #2f3e21;
+}
+.deck,
+.empty-card {
+  min-height: 0;
+}
+.bank-token:disabled {
+  opacity: 1;
+}
+.bank-token .token-disc {
+  width: 64px;
+  height: 64px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.bank-token .token-disc .gem-symbol {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 1px #0008);
+}
+.bank-token.chosen .token-disc {
+  outline: 3px solid #ffe09a;
+  outline-offset: 2px;
+  box-shadow: 0 0 12px #ffe09a65;
+}
+.token-name {
+  font-size: 12px;
+  color: #cbd7ca;
+  opacity: 1;
+}
+.bank-token > b {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+.resource-column,
+.mini-resource {
+  border-radius: 6px;
+  background: var(--gem);
+  color: var(--gem-ink);
+  padding: 7px 3px;
+  border: 1px solid var(--gem-edge);
+}
+.resource-column > b,
+.resource-column > span,
+.mini-resource > b,
+.mini-resource > span {
+  color: var(--gem-ink);
+}
+.resource-column > b {
+  font-size: 20px;
+  font-weight: 700;
+}
+.resource-column > span {
+  font-size: 16px;
+  font-weight: 650;
+  border-top: 1px solid #80808055;
+  padding-top: 5px;
+  width: 100%;
+  text-align: center;
+}
+.resource-column > .gem-symbol {
+  width: 28px;
+  height: 28px;
+}
+.resource-table {
+  gap: 10px;
+}
+.resource-labels {
+  font-size: 12px;
+  gap: 18px;
+  padding-bottom: 10px;
+}
+.mini-resource > b {
+  font-size: 16px;
+  font-weight: 700;
+}
+.mini-resource > span {
+  font-size: 14px;
+  font-weight: 600;
+  border-top: 1px solid #80808055;
+  width: 100%;
+  padding-top: 4px;
+  text-align: center;
+}
+.mini-resource > .gem-symbol {
+  width: 24px;
+  height: 24px;
+}
+.player-gems {
+  gap: 5px;
+}
+.mini-labels {
+  font-size: 11px;
+  gap: 19px;
+  padding-bottom: 7px;
+}
+.reserved-card {
+  border-left: 10px solid var(--gem);
+  background: #ebe7d5;
+  border-top-color: #ccc5af;
+  border-bottom-color: #ccc5af;
+  border-right-color: #ccc5af;
+}
+.reserved-card > div > span {
+  color: #273529;
+  font-size: 13px;
+}
+.reserved-card > svg:last-child {
+  color: #344336;
+}
+.reserved-card .costs .gem-count {
+  width: 23px;
+  height: 23px;
+  min-width: 23px;
+  font-size: 16px;
+}
+.noble-card {
+  background: #e8dec2;
+  color: #3b3525;
+  border-color: #b9ab86;
+}
+.noble-emblem {
+  color: #685020;
+}
+.noble-card .costs {
+  gap: 5px;
+  max-width: none;
+}
+.noble-card .costs .gem-count {
+  width: 27px;
+  height: 27px;
+  min-width: 27px;
+  font-size: 18px;
+}
+.noble-card.eligible {
+  background: #fff1bd;
+  color: #382d0e;
+  border-color: #ffe094;
+}
+.noble-card.eligible:hover {
+  background: #fff8de;
+}
+.return-token > span {
+  color: #d6dfd0;
+  font-size: 14px;
+}
+.payment-row > .gem-count {
+  color: #e7ece3;
+}
+.detail-bonus {
+  color: #e7ece3;
+}
+.card-detail > .development-card {
+  min-height: 0;
+  width: 172px;
+  flex-shrink: 0;
+}
+.collection-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (min-width: 1200px) {
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+  .market-row {
+    grid-template-columns: 58px repeat(4, minmax(0, 170px));
+    justify-content: space-between;
+  }
+}
+@media (max-width: 640px) {
+  .market-section {
+    overflow-x: auto;
+    padding: 4px 3px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #b79b61 #20372c;
+  }
+  .market-row {
+    min-width: 535px;
+    grid-template-columns: 35px repeat(4, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 11px;
+  }
+  .development-card {
+    min-height: 0;
+    aspect-ratio: 630 / 880;
+    border-radius: 6px;
+  }
+  .deck,
+  .empty-card {
+    min-height: 0;
+  }
+  .development-card .card-head {
+    padding: 6px 5px;
+  }
+  .development-card .prestige {
+    font-size: 27px;
+  }
+  .card-bonus {
+    width: 27px;
+    height: 30px;
+  }
+  .card-bonus .gem-symbol {
+    width: 25px;
+    height: 25px;
+  }
+  .development-card .card-center > .gem-symbol {
+    width: 35px;
+    height: 35px;
+  }
+  .development-card .card-foot {
+    left: 5px;
+    bottom: 6px;
+  }
+  .development-card .card-foot .costs {
+    gap: 3px;
+  }
+  .development-card .card-foot .gem-count {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    font-size: 16px;
+  }
+  .bank-token .token-disc {
+    width: 46px;
+    height: 46px;
+    border-width: 2px;
+  }
+  .bank-token > b {
+    font-size: 20px;
+  }
+  .token-name {
+    font-size: 11px;
+  }
+  .resource-table {
+    gap: 5px;
+  }
+  .resource-column > b {
+    font-size: 17px;
+  }
+  .resource-column > span {
+    font-size: 14px;
+  }
+  .resource-column > .gem-symbol {
+    width: 24px;
+    height: 24px;
+  }
+  .resource-labels {
+    font-size: 10px;
+    gap: 17px;
+    padding-bottom: 10px;
+  }
+  .your-score {
+    padding-right: 5px;
+  }
+  .your-resources {
+    gap: 6px;
+  }
+  .noble-card .costs {
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+  .noble-card .costs .gem-count {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    font-size: 15px;
+  }
+  .players-list {
+    grid-template-columns: 1fr;
+  }
+  .player-panel {
+    padding: 14px;
+  }
+  .card-detail > .development-card {
+    min-height: 0;
+    width: 143px;
+  }
+  .card-detail .development-card .card-foot .gem-count {
+    width: 29px;
+    height: 29px;
+    min-width: 29px;
+    font-size: 19px;
+  }
+  .collection-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 370px) {
+  .bank-token .token-disc {
+    width: 38px;
+    height: 38px;
+  }
+  .bank-pool {
+    gap: 4px;
+  }
+}
