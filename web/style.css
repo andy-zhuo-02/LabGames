@@ -64,3 +64,47 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 .join-request small{display:block;color:var(--muted);font-size:12px}
 .request-buttons{display:flex;gap:8px;flex-shrink:0}
 @media(max-width:600px){.join-request{flex-wrap:wrap}.request-buttons{margin-left:auto}}
+
+.settings-menu{position:relative;font-size:14px}.settings-menu summary{cursor:pointer;padding:10px;white-space:nowrap}.settings-menu>div{position:absolute;right:0;top:100%;z-index:30;display:flex;flex-direction:column;min-width:145px;background:var(--panel);border:1px solid var(--border);padding:8px;border-radius:10px;box-shadow:0 6px 24px #0007}
+.room-details{margin:10px 0}.room-details>summary{cursor:pointer;font-size:14px;color:var(--gold);padding:9px 0}.room-details .room-panel{margin:8px 0 18px}.room-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.room-tools button{font-size:13px}
+.requests-float{position:fixed;right:20px;bottom:24px;z-index:35;background:var(--gold);color:#213329;box-shadow:0 4px 18px #0007}.requests-float[hidden]{display:none}
+.recover-form{margin:18px 0}.recover-form summary{cursor:pointer;padding:8px 0}.recover-form button{margin-top:8px}
+#invite-qr{display:block;max-width:100%;height:auto;margin:12px auto 20px;background:white;padding:5px}#qr-dialog>button{width:100%}#recovery-dialog>button{margin-top:18px}
+.pot-explanation{margin:4px 0 10px}.pot-explanation small{display:block;font-size:12px;color:var(--muted)}.privacy-mode:not(.peeking) .pot-explanation .private-detail{display:none}.pot-explanation .privacy-cover{display:none}.privacy-mode:not(.peeking) .pot-explanation .privacy-cover{display:block}
+.showdown-hand{flex-wrap:wrap}.best-five{width:100%;margin-top:6px}.best-five>small{color:var(--muted);font-size:11px}.best-five-cards{--card-w:32px;--card-h:44px;display:flex;gap:4px;justify-content:flex-start}.best-five-cards .card{outline:1px solid #e8cb87aa;padding:3px}.best-five-cards .rank{font-size:16px}.best-five-cards .suit{font-size:12px}.best-five-cards .large-suit{font-size:17px;right:3px;bottom:2px}.best-five-cards.private-cards{margin-left:0}
+.hand-replay{border-top:1px solid var(--border);padding:10px 0;font-size:12px}.hand-replay summary{cursor:pointer;font-size:14px}.hand-replay summary b{float:right}.hand-replay p{margin:8px 0}.hand-replay ol{padding-left:19px}.hand-replay li{padding:3px 0}.replay-board{display:flex;gap:4px;--card-w:32px;--card-h:44px;margin:8px 0}.replay-board .rank{font-size:16px}.replay-board .suit{font-size:12px}.replay-board .large-suit{font-size:17px}
+#chip-chart{padding-top:12px}#chip-chart svg{width:100%;height:auto}#chip-chart svg text{font-size:10px;fill:#b6cbd2}.chart-legend{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:12px}
+@media(max-width:700px){
+  .topbar{height:auto;min-height:60px;padding:8px 12px;gap:8px;flex-wrap:wrap}.brand{font-size:15px;gap:7px}.brand-mark{width:30px;height:34px;font-size:25px}.brand small{display:none}.table-label{font-size:11px}.topbar nav{width:100%;gap:5px;justify-content:flex-end}.topbar button{padding:6px 9px;font-size:12px;min-height:40px}.settings-menu summary{padding:8px;font-size:12px}
+  main{padding:10px 10px 18px}.game-heading{margin-bottom:5px}.game-heading .eyebrow{display:none}.game-heading h1{font-size:19px}.game-meta{font-size:11px;gap:8px;max-width:170px}.save-status{font-size:10px;margin:0}.room-details{margin:2px 0}.room-details>summary{font-size:12px;padding:6px 0}.room-status{font-size:12px}.room-panel{padding:12px!important}
+  .arena,.arena[data-count="5"],.arena[data-count="6"]{height:350px;margin-top:10px;--card-w:35px;--card-h:49px}.felt,.arena[data-count="5"] .felt,.arena[data-count="6"] .felt{inset:30px 22px 47px;border-width:6px;border-radius:43% / 35%}.table-center,.arena[data-count="5"] .table-center,.arena[data-count="6"] .table-center{top:35%;max-width:78%}.street-label{font-size:10px;margin-bottom:7px}.table-note{display:none}.pot{margin-top:7px}.pot strong{font-size:21px}.board{gap:4px}.board .rank{font-size:17px}.board .suit{font-size:13px}.board .large-suit{font-size:20px}
+  .seat,.arena[data-count="5"] .seat:not(.hero),.arena[data-count="6"] .seat:not(.hero){width:94px}.seat-box{padding:6px}.seat-top{gap:4px}.seat-name{font-size:11px!important;max-width:60px!important}.seat-style{display:none}.avatar{width:23px;height:23px;font-size:12px}.seat-money{font-size:16px;margin-top:4px}.seat .hole-cards{--card-w:23px;--card-h:31px;margin-bottom:-5px}.seat.hero{width:136px}.seat.hero .hole-cards{--card-w:37px;--card-h:50px;gap:5px;margin-bottom:5px}.seat.hero .hole-cards .rank{font-size:19px}.seat.hero .hole-cards .suit{font-size:14px}.seat-action,.seat-action .ready-badge{font-size:10px;line-height:17px}.seat-action .ready-badge{padding:0 4px}.seat-bet{font-size:10px}.turn-countdown{font-size:10px;line-height:14px;bottom:-6px}.position{font-size:9px;line-height:16px}
+  body.live-hand{padding-bottom:calc(var(--dock-height,240px) + env(safe-area-inset-bottom) + 18px)}
+  .live-hand .action-dock{position:fixed;bottom:0;left:0;right:0;z-index:20;border-radius:14px 14px 0 0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -5px 24px #0006;max-height:65dvh;overflow-y:auto}.live-hand .turn-header{margin-bottom:8px}.live-hand .turn-title{font-size:15px}.live-hand .turn-header .muted{font-size:11px;line-height:1.35}.live-hand .privacy-hint{font-size:10px;margin:2px 0 7px}.live-hand .table-exit-bar{display:none}.action-buttons>button{min-height:44px}.quick-bets button{min-height:40px;min-width:42px;padding:4px 7px}.quick-bets{gap:4px}.raise-controls{margin-top:8px}.raise-controls input{min-height:40px}.raise-caption{width:100%;font-size:11px}.live-hand .requests-float{bottom:calc(var(--dock-height,240px) + 12px)}.requests-float{right:12px;font-size:12px;min-height:40px}.live-hand .toast{bottom:calc(var(--dock-height,240px) + 60px)}
+  .keyboard-open .action-dock{max-height:85dvh}.keyboard-open #turn-hint,.keyboard-open .quick-bets{display:none}.sidebar{display:block}.sidebar>section,.sidebar>details{margin-top:16px}.hand-replay{font-size:13px}.best-five-cards{--card-w:35px;--card-h:48px}.room-tools button,.kick-button{min-height:44px!important}
+}
+@media(max-width:700px) and (orientation:landscape){.live-hand .action-dock{left:auto;width:42%;max-height:95dvh}.live-hand main{margin-right:42%;padding-right:8px}.live-hand{padding-bottom:0}.live-hand .arena{height:310px}.live-hand .sidebar{display:none}.live-hand .turn-header .muted{display:none}.live-hand .action-buttons{flex-wrap:wrap}.live-hand .action-buttons>button{flex-basis:40%}}
+@media(max-width:700px){
+ .live-hand .brand,.live-hand .table-label{display:none}.live-hand .topbar{min-height:48px;padding:4px 10px}.live-hand .topbar nav{justify-content:space-between}.live-hand .save-status{display:none}
+ .arena,.arena[data-count="5"],.arena[data-count="6"]{height:clamp(350px,calc(100dvh - var(--dock-height,220px) - 120px),420px)}
+ .table-center,.arena[data-count="5"] .table-center,.arena[data-count="6"] .table-center{top:30%}.arena .seat.hero{--y:84%!important}
+ .quick-bets{flex-wrap:nowrap;overflow-x:auto;max-width:100%;padding-bottom:4px}.quick-bets button{flex-shrink:0;min-height:44px}.quick-bets .raise-caption{width:auto;white-space:nowrap;flex-shrink:0}.quick-bets:before{content:'滑动 →';font-size:10px;white-space:nowrap;color:var(--muted)}
+}
+
+/* Keep compact seat contents within their boxes, and clear a central board lane. */
+@media(max-width:700px){
+ .seat-action{overflow:hidden;text-overflow:ellipsis}.seat.hero .avatar{width:23px;height:23px}.seat.hero .seat-box{padding:6px;gap:6px}.seat.hero .seat-top{gap:4px}.seat.hero .seat-name{max-width:36px!important}.seat.hero .seat-money{font-size:18px}
+ .arena[data-count="4"] .seat:nth-child(2),.arena[data-count="4"] .seat:nth-child(4){--y:22%!important}
+ .arena[data-count="5"] .seat:nth-child(2),.arena[data-count="6"] .seat:nth-child(2){--x:16%!important;--y:70%!important}
+ .arena[data-count="5"] .seat:nth-child(5),.arena[data-count="6"] .seat:nth-child(6){--x:84%!important;--y:70%!important}
+ .arena[data-count="6"] .seat:nth-child(3){--x:16%!important;--y:22%!important}.arena[data-count="6"] .seat:nth-child(5){--x:84%!important;--y:22%!important}
+}
+@media(max-width:360px){
+ .seat,.arena[data-count="5"] .seat:not(.hero),.arena[data-count="6"] .seat:not(.hero){width:84px}.seat.hero{width:128px}
+ .arena[data-count="5"] .seat:nth-child(2),.arena[data-count="6"] .seat:nth-child(2),.arena[data-count="6"] .seat:nth-child(3){--x:14%!important}
+ .arena[data-count="5"] .seat:nth-child(5),.arena[data-count="6"] .seat:nth-child(6),.arena[data-count="6"] .seat:nth-child(5){--x:86%!important}
+}
+/* Portrait uses a bottom dock; narrow landscape keeps its controls on the right. */
+@media(max-width:700px) and (orientation:landscape){
+ .live-hand .action-dock{width:42%}.live-hand .arena{min-width:300px;height:350px}.live-hand .requests-float{bottom:auto;top:10px}.live-hand .toast{bottom:12px}
+}

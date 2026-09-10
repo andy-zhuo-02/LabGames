@@ -11,6 +11,7 @@ from pokerkit import StandardHighHand
 from bots import STRATEGIES, make_bot
 from engine import Action, GameConfig, Table
 from play_poker import HAND_NAMES, STREET_NAMES, describe_action
+from hand_details import public_details
 
 
 PROFILES = {
@@ -40,6 +41,7 @@ class BrowserGame:
         self.completed = 0
         self.wins = 0
         self.player_wins = {}
+        self.player_hands = {}
         self.history = []
         self.room = "轻松练手"
 
@@ -70,6 +72,7 @@ class BrowserGame:
         self.room = room
         self.completed = self.wins = 0
         self.player_wins = {}
+        self.player_hands = {}
         self.history = []
         self.version += 1
         self._account_result()
@@ -121,11 +124,16 @@ class BrowserGame:
         self.wins += payoff > 0
         for player_id, profit in result.payoffs:
             self.player_wins[player_id] = self.player_wins.get(player_id, 0) + (profit > 0)
+            self.player_hands[player_id] = self.player_hands.get(player_id, 0) + 1
         winners = sorted({i for pot in result.payouts for i, amount in pot.awards if amount})
+        details = public_details(hand)
+        details["stacks"].extend({"id": p.player_id, "name": p.name, "stack": p.stack, "initial": p.stack}
+                                 for p in self.table.players if p.player_id not in hand.player_ids)
         self.history.insert(0, {
             "hand_number": hand.hand_number, "profit": payoff,
             "payoffs": dict(result.payoffs),
             "board": list(result.board), "winners": [self.table.players[i].name for i in winners],
+            "details": details,
         })
         self.history = self.history[:30]
 
@@ -161,7 +169,8 @@ class BrowserGame:
                 "bet": player.bet if player else 0,
                 "position": player.position if player else "",
                 "folded": seat.player_id in folded,
-                "eliminated": player is None or (hand.finished and seat.stack == 0),
+                "eliminated": seat.stack == 0,
+                "waiting_for_hand": player is None and seat.stack > 0,
                 "all_in": bool(player and player.active and player.stack == 0 and not hand.finished),
                 "cards": list(own_cards) if seat.player_id == viewer_id else list(shown.get(seat.player_id, ())),
                 "last_action": describe_action(latest[seat.player_id]) if seat.player_id in latest else "",
@@ -196,6 +205,9 @@ class BrowserGame:
                                  "hand_type": HAND_NAMES.get(item.hand_type, item.hand_type)}
                                 for item in result.shown_hands],
             }
+            details = self.history[0].get("details") if self.history and self.history[0]["hand_number"] == hand.hand_number else None
+            details = details or public_details(hand)
+            summary["shown_hands"], summary["payouts"] = details["shown_hands"], details["payouts"]
         return {
             "mode": "multiplayer" if multiplayer else "solo", "viewer_id": viewer_id,
             "version": self.version, "phase": "finished" if hand.finished else "playing",
@@ -207,7 +219,7 @@ class BrowserGame:
             "players": players, "legal": asdict(hand.legal_actions(viewer_id)), "hand_type": current_type,
             "actions": [{"player": table.players[item.player_id].name, "street": STREET_NAMES[item.street],
                          "description": describe_action(item)} for item in hand.actions[-30:]],
-            "stats": {"hands": self.completed, "wins": self.player_wins.get(viewer_id, 0),
+            "stats": {"hands": self.player_hands.get(viewer_id, 0), "wins": self.player_wins.get(viewer_id, 0),
                       "profit": table.players[viewer_id].stack - table.config.starting_stack if viewer_id is not None else 0},
             "result": summary,
             "history": [{**{key: value for key, value in item.items() if key != "payoffs"},

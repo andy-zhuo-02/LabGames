@@ -179,6 +179,25 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "请使用本地游戏地址。"}, 403)
             return
         path = urlsplit(self.path).path
+        if path == "/api/invite-qr":
+            import qrcode
+            from qrcode.image.svg import SvgPathFillImage
+            sid, game = self._session()
+            with game.lock:
+                state = self._snapshot(sid, game)
+                room = state.get("room_info", {})
+                if not room or room.get("pending_approval"):
+                    self._json({"error": "入桌后才能生成邀请二维码。"}, 409)
+                    return
+                body = qrcode.make(room["join_url"], image_factory=SvgPathFillImage, border=4).to_string()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == "/api/state":
             try:
                 sid, game = self._session()
@@ -216,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = urlsplit(self.path).path.removeprefix("/api/")
         if route not in {"new", "action", "step", "next", "finish", "room/create", "room/join",
-                         "room/start", "room/leave", "room/rematch", "room/kick", "room/approve", "room/reject"}:
+                         "room/start", "room/leave", "room/rematch", "room/kick", "room/approve", "room/reject", "room/away", "room/recover"}:
             self._json({"error": "未知操作。"}, 404)
             return
         try:

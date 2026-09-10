@@ -30,10 +30,13 @@ let peekTarget = null, peekPointer = null, privacyContext = null;
 let pollTimer = null, polling = false, mutationEpoch = 0, lastControlsKey = null, pendingAllIn = null;
 let pendingKick = null, departureSeen = null;
 let deadlineAt = 0, announcedTurn = null;
+let seenApplications = new Set(), historyRenderKey = null;
 const multiplayer = () => state?.mode === "multiplayer";
 const viewerId = () => state ? state.viewer_id : 0;
 const heroPlayer = () => state.players.find((player) => player.id === viewerId());
 const scope = (snapshot = state) => snapshot?.room_info?.code || "solo";
+const actionScope = (snapshot = state) => [snapshot?.server_id, scope(snapshot), snapshot?.room_info?.round_id,
+  snapshot?.viewer_id, snapshot?.hand_number, snapshot?.action_number, snapshot?.actor_id].join(":");
 
 function card(code, hidden = false) {
   if (hidden) return '<span class="card back" role="img" aria-label="未公开的底牌"></span>';
@@ -97,12 +100,25 @@ function playSound(kind = "action") {
 function acceptState(snapshot) {
   state = snapshot;
   deadlineAt = performance.now() + (state.room_info?.remaining_ms || 0);
-  const myTurn = state.phase === "playing" && state.actor_id === viewerId() && !state.room_info?.recovering;
+  const myTurn = state.phase === "playing" && state.actor_id === viewerId() && !state.room_info?.recovering && !state.room_info?.away;
   const key = myTurn ? `${state.server_id}:${scope()}:${state.room_info?.round_id}:${state.hand_number}:${state.action_number}:${state.actor_id}` : null;
   const newTurn = key !== null && key !== announcedTurn;
   announcedTurn = key;
   if (newTurn) playSound("turn");
+  const applications = state.room_info?.applications || [];
+  const current = new Set(applications.map(a => `${scope()}:${a.id}`));
+  if (applications.some(a => !seenApplications.has(`${scope()}:${a.id}`))) notify(`有 ${applications.length} 位牌友等待审批，点击“入桌申请”处理。`);
+  seenApplications = current;
+  if (state.room_info && !state.room_info.pending_approval) rememberRoom(state.room_info.code);
   return newTurn;
+}
+function recentRooms() {
+  try { const rooms = JSON.parse(prefs.get("rooms", "[]")); return Array.isArray(rooms) ? rooms.filter(r => /^[A-Z2-9]{6}$/.test(r.code)).slice(0, 5) : []; }
+  catch { return []; }
+}
+function rememberRoom(code) {
+  const rooms = recentRooms();
+  if (rooms[0]?.code !== code) prefs.set("rooms", JSON.stringify([{code}, ...rooms.filter(r => r.code !== code)].slice(0, 5)));
 }
 function renderCountdown() {
   const paused = offline || state?.room_info?.recovering;
@@ -155,6 +171,7 @@ async function request(route = "state", payload = null) {
       else notify(data.error || "操作没有完成，请重试。");
     } else {
       const previousVersion = state?.version;
+      if (route === "new") { raiseVersion = null; lastControlsKey = null; historyRenderKey = null; }
       const newTurn = acceptState(data); ok = true;
       if (route === "room/leave") history.replaceState(null, "", location.pathname);
       if (!newTurn && payload && route !== "new" && state.version !== previousVersion) playSound(state.result?.profit > 0 ? "win" : "action");
@@ -233,6 +250,8 @@ function renderSeats(players, current) {
       else if (player.folded) status = "已弃牌 · 不参与摊牌";
       else if (!player.eliminated && state.result.end_reason === "folds") status = "无需摊牌";
     }
+    if (player.away) status = "暂离 · 保留座位";
+    else if (player.waiting_for_hand) status = "等待下一手发牌";
     const position = player.position.includes("BTN") ? player.position === "BTN/SB" ? "D / SB" : "D" : player.position;
     const ownCards = player.id === viewerId() && player.cards.length > 0;
     const cards = player.eliminated && !player.cards.length ? "" : ownCards ? privateCards(player.cards) : player.cards.length ? player.cards.map((c) => card(c)).join("") : card(null,true).repeat(2);
@@ -253,6 +272,7 @@ function renderSeats(players, current) {
 }
 
 function render() {
+  document.body.classList.toggle("live-hand", state?.phase === "playing");
   renderStorage();
   renderPrivacy();
   if (state?.room_exit && departureSeen !== state.room_exit.code) {
@@ -298,13 +318,15 @@ function render() {
   $("hands-played").textContent = state.stats.hands; $("hands-won").textContent = state.stats.wins;
   updateHTML($("activity"), state.actions.length ? state.actions.slice().reverse().map((a) => `<li><small>${esc(a.street)}</small><b>${esc(a.player)}</b><span>${esc(a.description)}</span></li>`).join("") : '<li class="empty-note">盲注已就位，底牌已发出。<br>好戏开场。</li>');
   $("history-count").textContent = state.history.length;
-  updateHTML($("history"), state.history.length ? state.history.map((h) => `<div class="history-item">第 ${h.hand_number} 手<strong class="${profitClass(h.profit)}">${signed(h.profit)}</strong><p>${h.winners.map(esc).join("、")} 收下底池</p></div>`).join("") : '<p class="empty-note">打完第一手，故事就开始了。</p>');
+  renderHistory();
   renderControls();
 }
 
 function renderControls() {
   if (["waiting", "pending"].includes(state?.phase)) return;
-  const key = `${state?.server_id}:${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}:${privacy}:${state?.room_info?.waiting_message}`;
+  const key = JSON.stringify([actionScope(), state?.phase, state?.legal, busy, offline, privacy,
+    state?.room_info?.away, state?.room_info?.recovering, state?.room_info?.waiting_for_seat,
+    state?.phase === "finished" ? state?.version : null, state?.room_info?.waiting_message]);
   if (key === lastControlsKey) return;
   lastControlsKey = key;
   const container = $("controls"), strength = $("hand-strength");
@@ -317,6 +339,13 @@ function renderControls() {
     $("join-table").onclick = showLobby; return;
   }
   const hero = heroPlayer() || {stack:0}, disabled = busy || offline;
+  if (state.room_info?.away) {
+    $("turn-title").textContent = "暂离中，座位和筹码已保留";
+    $("turn-hint").textContent = "本手轮到你时自动过牌或弃牌，之后不发牌。回来后重新准备即可参与。";
+    updateHTML(container, `<button id="return-to-table" class="primary" ${disabled ? "disabled" : ""}>回到牌桌</button>`);
+    $("return-to-table").onclick = () => request("room/away", {away:false});
+    return;
+  }
   if (state.room_info?.recovering) {
     $("turn-title").textContent = "牌局已恢复，等待重连";
     $("turn-hint").textContent = `${state.room_info.waiting_message}。到齐后继续本手，重新计算思考时间。`;
@@ -333,13 +362,13 @@ function renderControls() {
     const result = state.result;
     $("turn-title").textContent = result.match_over ? result.hero_won_table ? "你是这一桌的最后赢家！" : "今晚这一桌，先到这里" : result.title;
     $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码${result.match_over && hero.stack === 0 ? " · 重新开桌，就能再来一局" : " · 按你的节奏，准备好了再发牌"}`;
-    const payouts = result.payouts.map((p) => `${esc(p.label)}：${p.awards.map((a) => `${esc(a.name)} +${fmt(a.amount)}`).join("、")}`).join("<br>");
+    const payouts = result.payouts.map((p) => payoutHTML(p)).join("");
     const hands = result.shown_hands.map((h) => {
       const own = h.player_id === viewerId();
-      return `<div class="showdown-hand"><div class="showdown-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} role="group" aria-label="${esc(h.name)}的摊牌${own && privacy ? "，按住空格键查看" : ""}">${own ? privateCards(h.cards) : h.cards.map((code) => card(code)).join("")}</div><div class="showdown-player"><b title="${esc(h.name)}">${esc(h.name)}</b>${result.winner_ids?.includes(h.player_id) ? '<span class="win-badge">WIN</span> ' : ""}<span class="${own ? "private-detail" : ""}">${esc(h.hand_type)}</span>${own ? '<span class="privacy-cover">底牌已隐藏</span>' : ""}</div></div>`;
+      return `<div class="showdown-hand"><div class="showdown-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} role="group" aria-label="${esc(h.name)}的摊牌${own && privacy ? "，按住空格键查看" : ""}">${own ? privateCards(h.cards) : h.cards.map((code) => card(code)).join("")}</div><div class="showdown-player"><b title="${esc(h.name)}">${esc(h.name)}</b>${result.winner_ids?.includes(h.player_id) ? '<span class="win-badge">WIN</span> ' : ""}<span class="${own ? "private-detail" : ""}">${esc(h.comparison || h.hand_type)}</span>${own ? '<span class="privacy-cover">底牌已隐藏</span>' : ""}</div>${bestCardsHTML(h)}</div>`;
     }).join("");
     const returns = result.returned_bets.map((bet) => `${esc(bet.name)}退回 ${fmt(bet.amount)}`).join("、");
-    updateHTML(container, `<div class="result-row"><div class="result-detail"><p>${payouts}</p>${returns ? `<p class="muted">未被跟注：${returns}</p>` : ""}</div><button id="next-hand" class="primary" ${disabled ? "disabled" : ""}>${result.match_over ? "再开一桌" : "下一手 →"}</button></div><p class="result-explanation">${esc(result.explanation || "本手已结算，以下为已亮出的底牌。")}</p>${hands ? `<section class="showdown-list" aria-label="本手摊牌对比">${hands}</section>` : ""}`);
+    updateHTML(container, `<div class="result-row"><div class="result-detail">${payouts}${returns ? `<p class="muted">未被跟注：${returns}</p>` : ""}</div><button id="next-hand" class="primary" ${disabled ? "disabled" : ""}>${result.match_over ? "再开一桌" : "下一手 →"}</button></div><p class="result-explanation">${esc(result.explanation || "本手已结算，以下为已亮出的底牌。")}</p>${hands ? `<section class="showdown-list" aria-label="本手摊牌对比">${hands}</section>` : ""}`);
     if (multiplayer()) {
       const room = state.room_info;
       $("next-hand").disabled = disabled || !room.can_ready;
@@ -359,8 +388,9 @@ function renderControls() {
     if ($("finish-hand")) $("finish-hand").onclick = () => request("finish", {}); return;
   }
   const legal = state.legal, canRaise = legal.min_raise_to !== null;
-  const bettingKey = `${scope()}:${viewerId()}:${state.version}`;
+  const bettingKey = actionScope();
   if (raiseVersion !== bettingKey) { raiseTo = legal.min_raise_to || 0; raiseVersion = bettingKey; }
+  if (canRaise) raiseTo = Math.max(legal.min_raise_to, Math.min(legal.max_raise_to, raiseTo));
   $("turn-title").textContent = "轮到你了";
   $("turn-hint").textContent = legal.check ? "现在可以免费过牌，也可以主动下注。" : `跟注需要 ${fmt(legal.call_amount)} 筹码${legal.call_amount === hero.stack ? "，将投入全部剩余筹码" : ""}。不用着急，想好了再出手。`;
   updateHTML(container, `<div class="action-buttons"><button id="fold" ${disabled || !legal.fold ? "disabled" : ""}>弃牌</button><button id="check-call" class="call" ${disabled ? "disabled" : ""}>${legal.check ? "过牌" : `跟注 ${fmt(legal.call_amount)}`}</button><button id="raise" class="primary" ${disabled || !canRaise ? "disabled" : ""}>${canRaise ? `加到 ${fmt(raiseTo)}` : "不可加注"}</button><button id="all-in" class="all-in" ${disabled || !legal.all_in ? "disabled" : ""}>全下</button></div>${canRaise ? `<div class="raise-controls"><label class="raise-slider"><span class="sr-only">本轮加注到</span><input id="raise-slider" type="range" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label><label class="raise-amount"><span class="sr-only">本轮加注总额</span><input id="raise-number" type="number" inputmode="numeric" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label></div><div class="quick-bets"><button data-bet="min" ${disabled ? "disabled" : ""}>最小</button>${BET_FRACTIONS.map(([ratio, label]) => `<button data-bet="${ratio}" ${disabled ? "disabled" : ""}>${label}</button>`).join("")}<span id="raise-caption" class="raise-caption">再投入 ${fmt(raiseTo - hero.bet)} 筹码</span></div>` : ""}`);
@@ -377,6 +407,38 @@ function renderControls() {
     }; });
   }
 }
+function payoutHTML(pot) {
+  const ownWinner = pot.awards.some(a => a.name === state?.players?.find(p => p.id === viewerId())?.name);
+  const eligibility = pot.eligibility_limits?.length
+    ? `${pot.eligibility_limits.map(p => `${esc(p.name)} 最多 ${fmt(p.amount)}`).join("、")}（不同下注层级合并结算）`
+    : pot.participants?.map(esc).join("、");
+  return `<div class="pot-explanation"><b>${esc(pot.label)}：${pot.awards.map(a => `${esc(a.name)} +${fmt(a.amount)}`).join("、")}</b>${eligibility ? `<small>可争夺：${eligibility}</small>` : ""}${pot.reason ? `<small class="${ownWinner ? "private-detail" : ""}">${esc(pot.reason)}</small>${ownWinner ? '<small class="privacy-cover">胜负比较已隐藏</small>' : ""}` : ""}</div>`;
+}
+function bestCardsHTML(hand) {
+  if (!hand.best_cards) return "";
+  const own = hand.player_id === viewerId();
+  return `<div class="best-five"><small>最佳五张</small><div class="best-five-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} aria-label="${esc(hand.name)}的最佳五张牌">${own ? privateCards(hand.best_cards) : hand.best_cards.map(c => card(c)).join("")}</div></div>`;
+}
+function renderHistory() {
+  const key = JSON.stringify([scope(), viewerId(), privacy, state.history]);
+  if (key === historyRenderKey) return;
+  historyRenderKey = key;
+  const opened = new Set([...$("history").querySelectorAll("details[open]")].map(d => d.dataset.hand));
+  updateHTML($("history"), state.history.length ? state.history.map(h => `<details class="hand-replay" data-hand="${h.hand_number}" ${opened.has(String(h.hand_number)) ? "open" : ""}><summary>第 ${h.hand_number} 手 <b class="${profitClass(h.profit)}">${signed(h.profit)}</b></summary><p>${h.winners.map(esc).join("、")} 收下底池</p><div class="replay-board">${h.board.map(c => card(c)).join("")}</div>${h.details ? `${h.details.payouts.map(payoutHTML).join("")}${h.details.shown_hands.map(hand => `<p>${esc(hand.name)} · <span class="${hand.player_id === viewerId() ? "private-detail" : ""}">${esc(hand.comparison)}</span></p>${bestCardsHTML(hand)}`).join("")}<ol>${h.details.actions.map(a => `<li>${esc(a.street)} · ${esc(a.player)} ${esc(a.description)}</li>`).join("")}</ol>` : '<p class="muted">这手来自旧存档，仅保留摘要。</p>'}</details>`).join("") : '<p class="empty-note">完成一手后，可以在这里展开复盘。</p>');
+  const rows = state.history.filter(h => h.details?.stacks).slice().reverse();
+  const colors = ["#e8cb87", "#82c5a9", "#78a6dd", "#e48387", "#b78cea", "#78c4d1", "#f0a466", "#b9cd78"];
+  const series = new Map();
+  rows.forEach((h, x) => h.details.stacks.forEach(p => {
+    const id = `${p.id}:${p.name}`;
+    if (!series.has(id)) series.set(id, {name:p.name, points:[]});
+    series.get(id).points.push({x, y:p.stack});
+  }));
+  if (!rows.length) { $("chip-chart").innerHTML = '<p class="empty-note">完成一手后显示结算筹码曲线。</p>'; return; }
+  const max = Math.max(1, ...[...series.values()].flatMap(s => s.points.map(p => p.y)));
+  const x = n => 36 + n * 300 / Math.max(1, rows.length - 1), y = n => 158 - n * 130 / max;
+  const paths = [...series.values()].map((s, i) => `<polyline points="${s.points.map(p => `${x(p.x)},${y(p.y)}`).join(" ")}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="2"/>${s.points.map(p => `<circle cx="${x(p.x)}" cy="${y(p.y)}" r="2.5" fill="${colors[i % colors.length]}"><title>${esc(s.name)} · 第 ${rows[p.x].hand_number} 手：${fmt(p.y)}</title></circle>`).join("")}`).join("");
+  $("chip-chart").innerHTML = `<svg viewBox="0 0 355 185" role="img" aria-label="最近 ${rows.length} 手玩家结算筹码变化"><path d="M36 22V158H340" fill="none" stroke="#71868c"/><text x="3" y="30">${Math.round(max)}</text><text x="17" y="160">0</text><text x="36" y="179">第 ${rows[0].hand_number} 手</text><text x="275" y="179">第 ${rows.at(-1).hand_number} 手</text>${paths}</svg><div class="chart-legend">${[...series.values()].map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.name)} ${fmt(s.points.at(-1).y)}</span>`).join("")}</div><p class="muted">最近 30 手结算筹码。新人入桌会增加筹码，接替 AI 时原 AI 的筹码退出。</p>`;
+}
 function setRaise(value) {
   raiseTo = Math.min(state.legal.max_raise_to, Math.max(state.legal.min_raise_to, Math.round(Number(value)) || state.legal.min_raise_to));
   $("raise-slider").value = raiseTo; $("raise-number").value = raiseTo;
@@ -384,7 +446,7 @@ function setRaise(value) {
   $("raise-caption").textContent = `再投入 ${fmt(raiseTo - heroPlayer().bet)} 筹码`;
 }
 function confirmAllIn() {
-  pendingAllIn = {server_id:state.server_id, version:state.version, scope:scope()};
+  pendingAllIn = {actionScope:actionScope()};
   $("all-in-copy").textContent = `这会投入你剩下的 ${fmt(heroPlayer().stack)} 筹码。本手仍可能失利，确定就放手一搏。`;
   openDialog("all-in-dialog");
 }
@@ -411,6 +473,11 @@ function showLobby() {
 
 function renderRoom() {
   const room = state?.room_info;
+  $("room-details").hidden = !room;
+  if (room && $("room-details").dataset.phase !== state.phase) {
+    $("room-details").open = ["waiting", "pending"].includes(state.phase);
+    $("room-details").dataset.phase = state.phase;
+  }
   $("room-panel").hidden = !room;
   document.querySelector(".game-layout").hidden = ["waiting", "pending"].includes(state?.phase);
   $("room-button").hidden = !!room;
@@ -418,7 +485,12 @@ function renderRoom() {
   $("pace").closest("label").hidden = !!room;
   $("table-exit-bar").hidden = !room || room.pending_approval;
   $("join-requests").hidden = !room?.is_host || !room?.applications?.length;
+  $("requests-button").hidden = !room?.is_host || !room?.applications?.length;
+  $("requests-button").textContent = `入桌申请 ${room?.applications?.length || ""}`;
+  $("room-tools").hidden = !room || room.pending_approval;
   if (!room) return;
+  $("away-button").textContent = room.away ? "回到牌桌" : "暂时离席";
+  $("away-button").disabled = busy || offline;
   $("room-code").textContent = room.code;
   if ($("invite-url").value !== room.join_url) $("invite-url").value = room.join_url;
   $("waiting-room").hidden = state.phase !== "waiting";
@@ -442,10 +514,10 @@ function renderRoom() {
   $("ready-count").textContent = betweenHands ? readyText : "";
   $("table-ready-note").textContent = betweenHands ? `${readyText} · ${room.waiting_message}` : room.recovering ? room.waiting_message : "随时可以主动离桌，不用等待行动计时结束。";
   if ($("members-panel").dataset.phase !== state.phase) {
-    $("members-panel").open = betweenHands;
+    $("members-panel").open = state.phase === "waiting";
     $("members-panel").dataset.phase = state.phase;
   }
-  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.online ? "在线" : "暂时离线"}${member.waiting_for_seat ? " · 下一手入座" : ""}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
+  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.away ? "暂离 · 保留筹码" : member.online ? "在线" : "暂时离线"}${member.waiting_for_seat ? " · 下一手入座" : ""}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
   updateHTML($("join-request-list"), (room.applications || []).map((applicant) => `<div class="join-request"><div><b>${esc(applicant.name)}</b><small>${applicant.online ? "等待入桌" : "申请者暂时离线"}${!applicant.can_approve ? " · 座位已满，请先移出一位玩家" : ""}</small></div><div class="request-buttons"><button class="primary" data-approve="${esc(applicant.id)}" ${busy || offline || !applicant.can_approve ? "disabled" : ""}>同意</button><button class="outline" data-reject="${esc(applicant.id)}" ${busy || offline ? "disabled" : ""}>拒绝</button></div></div>`).join(""));
   document.querySelectorAll("[data-approve]").forEach((button) => { button.onclick = () => request("room/approve", {target_id:button.dataset.approve}); });
   document.querySelectorAll("[data-reject]").forEach((button) => { button.onclick = () => request("room/reject", {target_id:button.dataset.reject}); });
@@ -487,11 +559,13 @@ function showRankings() {
 
 function showNetwork() {
   if (busy || !state) return;
-  if (multiplayer()) { $("room-panel").scrollIntoView({behavior:"smooth", block:"start"}); return; }
+  if (multiplayer()) { $("room-details").open = true; $("room-panel").scrollIntoView({behavior:"smooth", block:"start"}); return; }
   if ($("lobby").open) $("lobby").close();
   $("network-error").hidden = true;
   $("friend-name").value = prefs.get("name", "");
   $("join-code").value = new URLSearchParams(location.search).get("room") || "";
+  updateHTML($("recent-rooms"), recentRooms().map(r => `<button type="button" class="outline" data-recent-room="${esc(r.code)}">${esc(r.code)}</button>`).join(""));
+  document.querySelectorAll("[data-recent-room]").forEach(button => { button.onclick = () => { $("join-code").value = button.dataset.recentRoom; $("join-code").focus(); }; });
   $("network-hint").textContent = state.network?.enabled ? "创建房间后，把邀请链接发给同一 Wi-Fi 下的朋友。每台设备用各自的浏览器加入。" : "当前只有本机可访问。要邀请其他设备，请用局域网模式启动游戏：./start_game.sh --lan";
   $("room-bot").innerHTML = state.catalog.map((bot) => `<option value="${esc(bot.id)}" ${bot.id === "calling_station" ? "selected" : ""}>${esc(bot.name)} · ${esc(bot.style)}</option>`).join("");
   if (!$("network-dialog").open) openDialog("network-dialog");
@@ -511,16 +585,16 @@ async function enterRoom(create) {
   }
 }
 
-async function copyInvite() {
-  const input = $("invite-url");
+async function copyField(id, label) {
+  const input = $(id);
   try {
     if (!navigator.clipboard?.writeText) throw new Error("Manual copy needed");
     await navigator.clipboard.writeText(input.value);
-    notify("邀请链接已复制，发给同一 Wi-Fi 下的朋友即可。");
+    notify(`${label}已复制。`);
   } catch {
     input.focus(); input.select(); input.setSelectionRange(0, input.value.length);
-    try { if (document.execCommand("copy")) { notify("邀请链接已复制。"); return; } } catch { /* Select for touch copy. */ }
-    notify("链接已选中，长按链接或按 Ctrl+C 复制。");
+    try { if (document.execCommand("copy")) { notify(`${label}已复制。`); return; } } catch { /* Select for touch copy. */ }
+    notify(`${label}已选中，长按或按 Ctrl+C 复制。`);
   }
 }
 
@@ -530,6 +604,20 @@ $("room-button").onclick = showLobby;
 $("close-lobby").onclick = () => closeDialog("lobby");
 $("help-button").onclick = () => openDialog("help");
 $("rankings-button").onclick = showRankings;
+$("requests-button").onclick = () => { $("room-details").open = true; $("join-requests").scrollIntoView({behavior:"smooth", block:"center"}); };
+$("away-button").onclick = () => state.room_info.away ? request("room/away", {away:false}) : openDialog("away-dialog");
+$("confirm-away").onclick = async () => { if (await request("room/away", {away:true})) closeDialog("away-dialog"); };
+$("qr-button").onclick = () => { $("qr-error").hidden = true; $("invite-qr").src = `/api/invite-qr?room=${encodeURIComponent(scope())}`; openDialog("qr-dialog"); };
+$("invite-qr").onerror = () => { $("qr-error").hidden = false; };
+$("recovery-button").onclick = () => { $("recovery-code").value = state.room_info.recovery_code; openDialog("recovery-dialog"); };
+$("copy-recovery").onclick = () => copyField("recovery-code", "座位恢复码");
+$("recover-seat").onclick = async () => {
+  if (await request("room/recover", {code:$("join-code").value.trim(), recovery_code:$("recover-input").value.trim()})) {
+    $("recover-input").value = ""; departureSeen = null; closeDialog("network-dialog");
+    history.replaceState(null, "", `/?room=${encodeURIComponent(scope())}`);
+    notify("已找回原座位，旧浏览器已退出。请保存新的恢复码。");
+  }
+};
 $("hand-strength").onclick = showRankings;
 $("friends-button").onclick = showNetwork;
 $("lobby-friends").onclick = showNetwork;
@@ -538,7 +626,7 @@ $("join-room").onclick = () => enterRoom(false);
 $("join-code").addEventListener("keydown", (event) => { if (event.key === "Enter") enterRoom(false); });
 $("fill-bots").onchange = () => { $("room-bot-label").hidden = !$("fill-bots").checked; };
 $("start-room").onclick = () => request("room/start", {ready:!state.room_info.ready});
-$("copy-invite").onclick = copyInvite;
+$("copy-invite").onclick = () => copyField("invite-url", "邀请链接");
 $("leave-room").onclick = () => state.room_info?.pending_approval ? request("room/leave", {}) : openDialog("leave-room-dialog");
 $("quick-leave-room").onclick = () => openDialog("leave-room-dialog");
 $("confirm-leave-room").onclick = async () => { if (await request("room/leave", {})) closeDialog("leave-room-dialog"); };
@@ -558,10 +646,11 @@ $("player-count").onchange = populateOpponents;
 document.querySelectorAll('input[name="room"]').forEach((input) => { input.onchange = populateOpponents; });
 document.querySelectorAll("[data-close]").forEach((button) => { button.onclick = () => closeDialog(button.dataset.close); });
 document.querySelectorAll("dialog").forEach((dialog) => { dialog.addEventListener("close", scheduleBot); });
+$("recovery-dialog").addEventListener("close", () => { $("recovery-code").value = ""; });
 $("lobby").addEventListener("cancel", (event) => { if (!state || state.phase === "lobby" || busy) event.preventDefault(); });
 $("confirm-all-in").onclick = () => {
   closeDialog("all-in-dialog");
-  if (!pendingAllIn || state.server_id !== pendingAllIn.server_id || state.version !== pendingAllIn.version || scope() !== pendingAllIn.scope) { notify("牌桌已经更新，请重新确认当前动作。"); return; }
+  if (!pendingAllIn || actionScope() !== pendingAllIn.actionScope) { notify("牌桌已经更新，请重新确认当前动作。"); return; }
   request("action", {kind:"all_in"});
 };
 $("setup-form").onsubmit = async (event) => {
@@ -623,6 +712,17 @@ document.addEventListener("contextmenu", (event) => {
 });
 window.addEventListener("blur", hidePrivateCards);
 window.addEventListener("pagehide", hidePrivateCards);
+function sizeActionDock() {
+  const dock = document.querySelector(".action-dock");
+  document.documentElement.style.setProperty("--dock-height", `${dock.getBoundingClientRect().height}px`);
+}
+if (window.ResizeObserver) new ResizeObserver(sizeActionDock).observe(document.querySelector(".action-dock"));
+sizeActionDock();
+window.addEventListener("resize", sizeActionDock);
+window.visualViewport?.addEventListener("resize", () => {
+  const keyboard = window.innerHeight - window.visualViewport.height > 130;
+  document.body.classList.toggle("keyboard-open", keyboard);
+});
 
 // Optional page tools use the exact public view shown to the player.
 if (document.modelContext?.registerTool) {

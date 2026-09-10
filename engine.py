@@ -349,16 +349,18 @@ seat after the previous BB pays the BB; the other player is BTN/SB.
         self.seed = seed
         self.hand: Hand | None = None
         self.hand_number = 0
+        self.sitting_out = set()
         self.button_id = self.active_ids[-1]
         self._previous_bb = None
 
     @property
     def active_ids(self):
-        return tuple(player.player_id for player in self.players if player.stack > 0)
+        return tuple(player.player_id for player in self.players if player.stack > 0 and player.player_id not in self.sitting_out)
 
     @property
     def winner(self):
-        return self.players[self.active_ids[0]] if len(self.active_ids) == 1 else None
+        funded = [player for player in self.players if player.stack > 0]
+        return funded[0] if len(funded) == 1 else None
 
     def _next_active(self, player_id):
         for offset in range(1, len(self.players) + 1):
