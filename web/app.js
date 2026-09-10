@@ -31,7 +31,7 @@ let pollTimer = null, polling = false, mutationEpoch = 0, lastControlsKey = null
 let pendingKick = null, departureSeen = null;
 let deadlineAt = 0, announcedTurn = null;
 const multiplayer = () => state?.mode === "multiplayer";
-const viewerId = () => state?.viewer_id ?? 0;
+const viewerId = () => state ? state.viewer_id : 0;
 const heroPlayer = () => state.players.find((player) => player.id === viewerId());
 const scope = (snapshot = state) => snapshot?.room_info?.code || "solo";
 
@@ -264,7 +264,7 @@ function render() {
   $("sound-button").textContent = `音效：${sound ? "开" : "关"}`;
   $("sound-button").setAttribute("aria-pressed", String(sound));
   renderRoom();
-  if (state?.phase === "waiting") return;
+  if (["waiting", "pending"].includes(state?.phase)) return;
   const playing = state && state.phase !== "lobby";
   $("close-lobby").hidden = !playing;
   $("room-button").textContent = playing ? "换牌桌" : "选牌桌";
@@ -303,7 +303,7 @@ function render() {
 }
 
 function renderControls() {
-  if (state?.phase === "waiting") return;
+  if (["waiting", "pending"].includes(state?.phase)) return;
   const key = `${state?.server_id}:${scope()}:${viewerId()}:${state?.version}:${busy}:${offline}:${privacy}:${state?.room_info?.waiting_message}`;
   if (key === lastControlsKey) return;
   lastControlsKey = key;
@@ -316,11 +316,17 @@ function renderControls() {
     updateHTML(container, '<button class="primary" id="join-table">选择牌桌 →</button>');
     $("join-table").onclick = showLobby; return;
   }
-  const hero = heroPlayer(), disabled = busy || offline;
+  const hero = heroPlayer() || {stack:0}, disabled = busy || offline;
   if (state.room_info?.recovering) {
     $("turn-title").textContent = "牌局已恢复，等待重连";
     $("turn-hint").textContent = `${state.room_info.waiting_message}。到齐后继续本手，重新计算思考时间。`;
     updateHTML(container, '<div class="waiting">筹码和底牌已保留。无法回来的牌友，可由房主在房间信息中移出。</div>');
+    return;
+  }
+  if (state.room_info?.waiting_for_seat && state.phase !== "finished") {
+    $("turn-title").textContent = "房主已批准，下一手入座";
+    $("turn-hint").textContent = `本手先观战。结算后点击准备，以 ${fmt(state.room_info.starting_stack)} 筹码参与下一手。`;
+    updateHTML(container, '<div class="waiting">你的座位已预留，本手其他玩家继续行动。</div>');
     return;
   }
   if (state.phase === "finished") {
@@ -338,7 +344,7 @@ function renderControls() {
       const room = state.room_info;
       $("next-hand").disabled = disabled || !room.can_ready;
       $("next-hand").textContent = !room.can_ready ? "继续观战" : room.ready ? "取消准备" : result.match_over ? "同意重新组桌" : "准备下一手";
-      $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码 · 已准备 ${room.ready_count}/${room.ready_total} · ${room.waiting_message}`;
+      $("turn-hint").textContent = `${room.waiting_for_seat ? "本手未参与 · 准备后入座" : `本手 ${signed(result.profit)} 筹码`} · 已准备 ${room.ready_count}/${room.ready_total} · ${room.waiting_message}`;
       $("next-hand").onclick = () => request(result.match_over ? "room/rematch" : "next", {ready:!room.ready});
     } else $("next-hand").onclick = result.match_over ? showLobby : () => request("next", {});
     return;
@@ -406,17 +412,29 @@ function showLobby() {
 function renderRoom() {
   const room = state?.room_info;
   $("room-panel").hidden = !room;
-  document.querySelector(".game-layout").hidden = state?.phase === "waiting";
+  document.querySelector(".game-layout").hidden = ["waiting", "pending"].includes(state?.phase);
   $("room-button").hidden = !!room;
   $("friends-button").textContent = room ? "房间信息" : "和朋友玩";
   $("pace").closest("label").hidden = !!room;
-  $("table-exit-bar").hidden = !room;
+  $("table-exit-bar").hidden = !room || room.pending_approval;
+  $("join-requests").hidden = !room?.is_host || !room?.applications?.length;
   if (!room) return;
   $("room-code").textContent = room.code;
   if ($("invite-url").value !== room.join_url) $("invite-url").value = room.join_url;
   $("waiting-room").hidden = state.phase !== "waiting";
+  $("members-panel").hidden = !!room.pending_approval;
+  document.querySelector(".invite-row").hidden = !!room.pending_approval;
+  $("leave-room").textContent = room.pending_approval ? "撤回申请" : "离开牌桌";
+  $("leave-room").disabled = busy;
+  if (room.pending_approval) {
+    $("heading").textContent = "等待房主同意";
+    $("hand-label").textContent = "申请已发送";
+    $("room-label").textContent = `房间 ${room.code}`;
+    $("room-status").textContent = `${room.applicant_name}，正在等待房主 ${room.host_name} 批准。批准后自动进入房间；已开局时从下一手参与。`;
+    return;
+  }
   const actor = state.players?.find((player) => player.id === state.actor_id);
-  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · ${state.phase === "waiting" ? "把邀请链接发给同一 Wi-Fi 下的朋友" : "已开局，暂不接受新玩家"}${actor?.strategy === "human" && !room.recovering ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""} · ${room.waiting_message || room.notice || "牌局进行中"}`;
+  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · 随时可申请加入，由房主批准${actor?.strategy === "human" && !room.recovering ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""} · ${room.waiting_message || room.notice || "牌局进行中"}`;
   $("leave-room").disabled = busy;
   $("quick-leave-room").disabled = busy;
   const betweenHands = state.phase === "waiting" || state.phase === "finished";
@@ -427,7 +445,10 @@ function renderRoom() {
     $("members-panel").open = betweenHands;
     $("members-panel").dataset.phase = state.phase;
   }
-  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.online ? "在线" : "暂时离线"}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
+  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.online ? "在线" : "暂时离线"}${member.waiting_for_seat ? " · 下一手入座" : ""}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
+  updateHTML($("join-request-list"), (room.applications || []).map((applicant) => `<div class="join-request"><div><b>${esc(applicant.name)}</b><small>${applicant.online ? "等待入桌" : "申请者暂时离线"}${!applicant.can_approve ? " · 座位已满，请先移出一位玩家" : ""}</small></div><div class="request-buttons"><button class="primary" data-approve="${esc(applicant.id)}" ${busy || offline || !applicant.can_approve ? "disabled" : ""}>同意</button><button class="outline" data-reject="${esc(applicant.id)}" ${busy || offline ? "disabled" : ""}>拒绝</button></div></div>`).join(""));
+  document.querySelectorAll("[data-approve]").forEach((button) => { button.onclick = () => request("room/approve", {target_id:button.dataset.approve}); });
+  document.querySelectorAll("[data-reject]").forEach((button) => { button.onclick = () => request("room/reject", {target_id:button.dataset.reject}); });
   if (state.phase === "waiting") {
     $("heading").textContent = "朋友的牌桌"; $("hand-label").textContent = "等候开局";
     $("room-label").textContent = `房间 ${room.code}`;
@@ -482,6 +503,7 @@ async function enterRoom(create) {
   $("network-error").hidden = true;
   const payload = create ? {name, capacity:Number($("room-capacity").value), turn_seconds:Number($("room-turn-seconds").value), fill_bots:$("fill-bots").checked, bot_strategy:$("room-bot").value} : {name, code:$("join-code").value.trim().toUpperCase()};
   if (await request(create ? "room/create" : "room/join", payload)) {
+    departureSeen = null;
     prefs.set("name", name);
     history.replaceState(null, "", `/?room=${encodeURIComponent(state.room_info.code)}`);
     closeDialog("network-dialog");
@@ -517,7 +539,7 @@ $("join-code").addEventListener("keydown", (event) => { if (event.key === "Enter
 $("fill-bots").onchange = () => { $("room-bot-label").hidden = !$("fill-bots").checked; };
 $("start-room").onclick = () => request("room/start", {ready:!state.room_info.ready});
 $("copy-invite").onclick = copyInvite;
-$("leave-room").onclick = () => openDialog("leave-room-dialog");
+$("leave-room").onclick = () => state.room_info?.pending_approval ? request("room/leave", {}) : openDialog("leave-room-dialog");
 $("quick-leave-room").onclick = () => openDialog("leave-room-dialog");
 $("confirm-leave-room").onclick = async () => { if (await request("room/leave", {})) closeDialog("leave-room-dialog"); };
 $("confirm-kick").onclick = async () => {

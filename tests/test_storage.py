@@ -173,6 +173,7 @@ class ReconnectTests(unittest.TestCase):
         self.registry.perform("host", "room/create", {"name": "房主", "capacity": 3, "fill_bots": False, "turn_seconds": 30})
         self.code = self.registry.membership["host"]
         self.registry.perform("friend", "room/join", {"code": self.code, "name": "朋友"})
+        self.command("host", "room/approve", target_id=self.registry.rooms[self.code].applicants["friend"].member_id)
 
     def command(self, sid, route, **payload):
         state = self.registry.snapshot(sid)
@@ -259,6 +260,7 @@ class PersistentHTTPTests(unittest.TestCase):
         _, state = self.host.request("room/create", {"name": "房主", "capacity": 2, "fill_bots": False, "turn_seconds": 30})
         self.code = state["room_info"]["code"]
         self.assertEqual(self.friend.request("room/join", {"name": "朋友", "code": self.code})[0], 200)
+        self.assertEqual(self.host.approve("朋友")[0], 200)
 
     def launch(self, port):
         self.server = PokerServer(("127.0.0.1", port), save_path=self.path)

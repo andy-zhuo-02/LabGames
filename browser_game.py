@@ -208,7 +208,7 @@ class BrowserGame:
             "actions": [{"player": table.players[item.player_id].name, "street": STREET_NAMES[item.street],
                          "description": describe_action(item)} for item in hand.actions[-30:]],
             "stats": {"hands": self.completed, "wins": self.player_wins.get(viewer_id, 0),
-                      "profit": table.players[viewer_id].stack - table.config.starting_stack},
+                      "profit": table.players[viewer_id].stack - table.config.starting_stack if viewer_id is not None else 0},
             "result": summary,
             "history": [{**{key: value for key, value in item.items() if key != "payoffs"},
                          "profit": item["payoffs"].get(viewer_id, 0)} for item in self.history],

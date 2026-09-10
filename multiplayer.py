@@ -10,7 +10,7 @@ import time
 
 from bots import STRATEGIES, make_bot
 from browser_game import BrowserGame, Conflict, PROFILES
-from engine import Action, GameConfig, Table
+from engine import Action, GameConfig, Player, Table
 
 
 TURN_SECONDS = 90
@@ -53,8 +53,9 @@ def discover_lan_ips():
 class Member:
     name: str
     seen: float
-    player_id: int = 0
+    player_id: int | None = 0
     member_id: str = field(default_factory=lambda: secrets.token_urlsafe(9))
+    joined_hand: int = 1
 
 
 @dataclass
@@ -76,17 +77,43 @@ class Room:
     ready: set[str] = field(default_factory=set)
     banned: set[str] = field(default_factory=set)
     recovering: bool = False
+    applicants: dict[str, Member] = field(default_factory=dict)
 
     def reset_ready(self):
         self.ready.clear()
         self.round_id += 1
 
     def readiness_members(self):
-        if self.game and self.game.table.hand.finished and self.game.table.winner is None:
-            active = {sid for sid, member in self.members.items() if self.game.table.players[member.player_id].stack > 0}
+        if self.game and self.game.table.hand.finished and self.can_continue():
+            active = {sid for sid, member in self.members.items() if member.player_id is None or self.game.table.players[member.player_id].stack > 0}
             if active:
                 return active
         return set(self.members)
+
+    def seating_plan(self):
+        """Plan between-hand buy-ins without touching the current hand or its cards."""
+        if not self.game:
+            return []
+        occupied = {m.player_id for m in self.members.values() if m.player_id is not None}
+        players = self.game.table.players
+        available = list(range(len(players), self.capacity))
+        available += sorted((p.player_id for p in players if p.player_id not in occupied),
+                            key=lambda i: (players[i].stack > 0, i))
+        waiting = [sid for sid, m in self.members.items() if m.player_id is None]
+        if len(waiting) > len(available):
+            raise ValueError("等待入座的人数超过房间容量。")
+        return list(zip(waiting, available))
+
+    def can_continue(self):
+        if not self.game:
+            return False
+        stacks = {p.player_id: p.stack for p in self.game.table.players}
+        for _, seat in self.seating_plan():
+            stacks[seat] = self.game.table.config.starting_stack
+        return sum(stack > 0 for stack in stacks.values()) >= 2
+
+    def playing_members(self):
+        return {sid for sid, m in self.members.items() if m.player_id is not None}
 
     def arm_turn(self, now):
         if self.recovering or self.game is None or self.game.table.hand.finished:
@@ -150,10 +177,21 @@ class RoomRegistry:
                 return None
             now = self.clock()
             room = self._room(sid)
+            if sid in room.applicants:
+                applicant = room.applicants[sid]
+                applicant.seen = now
+                return {"version": room.version, "phase": "pending", "mode": "multiplayer", "viewer_id": None,
+                        "catalog": [{"id": key, **profile} for key, profile in PROFILES.items()],
+                        "room_info": {"code": room.code, "host_name": room.members[room.host].name,
+                                      "is_host": False, "pending_approval": True, "applicant_name": applicant.name}}
             room.members[sid].seen = room.last_seen = now
             viewer = room.members[sid]
             if room.game:
                 snapshot = room.game.snapshot(viewer.player_id, multiplayer=True)
+                snapshot["history"] = [h for h in snapshot["history"] if h["hand_number"] >= viewer.joined_hand]
+                snapshot["stats"]["hands"] = max(0, room.game.completed - viewer.joined_hand + 1)
+                if snapshot["result"]:
+                    snapshot["result"]["match_over"] = not room.can_continue()
                 humans = {member.player_id: (token, member) for token, member in room.members.items()}
                 for player in snapshot["players"]:
                     human = humans.get(player["id"])
@@ -166,7 +204,7 @@ class RoomRegistry:
             snapshot["version"] = room.version
             eligible = room.readiness_members()
             between_hands = room.game is None or room.game.table.hand.finished
-            connection_members = set(room.members) if room.recovering else eligible
+            connection_members = room.playing_members() if room.recovering else eligible
             waiting_connection = [member.name for token, member in room.members.items()
                                   if token in connection_members and now - member.seen > ONLINE_SECONDS]
             waiting_ready = [member.name for token, member in room.members.items()
@@ -196,10 +234,16 @@ class RoomRegistry:
                 "round_id": room.round_id, "can_ready": can_ready, "ready": sid in room.ready,
                 "ready_count": len(room.ready & eligible), "ready_total": len(eligible),
                 "recovering": room.recovering, "waiting_message": "；".join(messages),
+                "pending_approval": False, "waiting_for_seat": viewer.player_id is None,
+                "starting_stack": room.game.table.config.starting_stack if room.game else 2000,
+                "applications": [{"id": m.member_id, "name": m.name, "online": now - m.seen <= ONLINE_SECONDS,
+                                  "can_approve": len(room.members) < room.capacity}
+                                 for m in room.applicants.values()] if sid == room.host else [],
                 "waiting_for_connection": waiting_connection, "waiting_for_ready": waiting_ready if between_hands else [],
                 "members": [{"id": member.member_id, "player_id": member.player_id, "name": member.name, "is_you": token == sid, "is_host": token == room.host,
                              "online": now - member.seen <= ONLINE_SECONDS,
                              "ready": token in room.ready, "needs_ready": token in eligible,
+                             "waiting_for_seat": member.player_id is None,
                              "can_kick": sid == room.host and token != sid}
                             for token, member in room.members.items()],
                 "turn_seconds": room.turn_seconds,
@@ -255,14 +299,12 @@ class RoomRegistry:
                 room = self.rooms[code]
                 if sid in room.banned:
                     raise Conflict("你已被房主移出这个房间，暂不能重新加入。")
-                if room.game:
-                    raise Conflict("这桌已经开局，请等大家返回等候室后再加入。")
-                if len(room.members) >= room.capacity:
-                    raise Conflict("这间房已满。")
                 name = self._name(payload)
-                if any(member.name == name for member in room.members.values()):
+                if any(member.name == name for member in [*room.members.values(), *room.applicants.values()]):
                     raise Conflict("房间里已有同名牌友，请换个昵称。")
-                room.members[sid] = Member(name, now, len(room.members))
+                if len(room.applicants) >= 12:
+                    raise Conflict("等待审批的人数较多，请稍后再申请。")
+                room.applicants[sid] = Member(name, now, None)
                 self.membership[sid] = code
                 self.departures.pop(sid, None)
                 room.changed(now)
@@ -272,15 +314,42 @@ class RoomRegistry:
             room = self._room(sid)
             if payload.get("room_code") != room.code:
                 raise Conflict("房间已更新，请按当前画面操作。")
+            if sid in room.applicants:
+                if route != "room/leave":
+                    raise Conflict("请等待房主批准入桌申请。")
+                del room.applicants[sid]
+                del self.membership[sid]
+                room.changed(now)
+                return
             if route in {"room/start", "next", "room/rematch"}:
                 # Votes may share a version, but must belong to the same hand/lobby.
                 if type(payload.get("round_id")) is not int or payload["round_id"] != room.round_id:
                     raise Conflict("准备阶段已更新，请确认当前牌局后再操作。")
-            elif route != "room/leave" and (type(payload.get("version")) is not int or payload["version"] != room.version):
+            elif route not in {"room/leave", "room/kick", "room/approve", "room/reject"} and (type(payload.get("version")) is not int or payload["version"] != room.version):
                 raise Conflict("房间已更新，请按当前画面操作。")
             room.members[sid].seen = room.last_seen = now
             if route == "room/leave":
                 self._remove_member(room, sid, now)
+                return
+            if route in {"room/approve", "room/reject"}:
+                if sid != room.host:
+                    raise Conflict("只有房主可以审批入桌申请。")
+                target = next((token for token, m in room.applicants.items() if m.member_id == payload.get("target_id")), None)
+                if target is None:
+                    raise Conflict("这份入桌申请已处理或已撤回。")
+                if route == "room/approve":
+                    if len(room.members) >= room.capacity:
+                        raise Conflict("真人座位已满，请先移出一位玩家再批准。")
+                    member = room.applicants.pop(target)
+                    member.player_id = None if room.game else len(room.members)
+                    member.joined_hand = room.game.table.hand_number + 1 if room.game else 1
+                    room.members[target] = member
+                    room.notice = f"房主已批准 {member.name} 入桌。" + ("从下一手开始参与。" if room.game else "请准备后开局。")
+                else:
+                    room.applicants.pop(target)
+                    self.membership.pop(target, None)
+                    self.departures[target] = {"code": room.code, "message": "房主未批准本次入桌申请。"}
+                room.changed(now)
                 return
             if route == "room/kick":
                 if sid != room.host:
@@ -294,9 +363,9 @@ class RoomRegistry:
             if route in {"room/start", "next", "room/rematch"}:
                 if route == "room/start" and room.game is not None:
                     raise Conflict("当前不在开局等候室。")
-                if route == "next" and (room.game is None or not room.game.table.hand.finished or room.game.table.winner):
+                if route == "next" and (room.game is None or not room.game.table.hand.finished or not room.can_continue()):
                     raise Conflict("当前不能准备下一手。")
-                if route == "room/rematch" and (room.game is None or room.game.table.winner is None):
+                if route == "room/rematch" and (room.game is None or not room.game.table.hand.finished or room.can_continue()):
                     raise Conflict("整桌结束后才能共同确认重新组桌。")
                 if sid not in room.readiness_members():
                     raise Conflict("你的筹码已用尽，可以继续观战，无需准备下一手。")
@@ -317,6 +386,8 @@ class RoomRegistry:
                 if room.recovering:
                     raise Conflict("本手已恢复，等待玩家重连后继续。")
                 player_id = room.members[sid].player_id
+                if player_id is None:
+                    raise Conflict("你将从下一手入座，本手请先观战。")
                 room.game.table.apply_action(player_id, Action(payload.get("kind"), payload.get("amount")))
             else:
                 raise Conflict("好友房的 AI 由服务器统一推进，请等待当前玩家行动。")
@@ -329,13 +400,16 @@ class RoomRegistry:
         if kicked:
             self.departures[sid] = {"code": room.code, "message": "你已被房主移出房间。"}
         if not room.members:
+            for applicant in room.applicants:
+                self.membership.pop(applicant, None)
+                self.departures[applicant] = {"code": room.code, "message": "房间已关闭，入桌申请已取消。"}
             del self.rooms[room.code]
             return
         if room.host == sid:
             room.host = next(iter(room.members))
         label = "被房主移出" if kicked else "已离开"
         room.notice = f"{member.name} {label}房间。"
-        if room.game:
+        if room.game and member.player_id is not None:
             player_id = member.player_id
             room.game.strategies[player_id] = "calling_station"
             room.game.bots[player_id] = make_bot("calling_station", secrets.randbits(64))
@@ -367,12 +441,28 @@ class RoomRegistry:
             game.table.start_hand()
             for i, member in enumerate(room.members.values()):
                 member.player_id = i
+                member.joined_hand = 1
             room.game, room.notice = game, "大家都准备好了，开始第一手。"
         elif room.game.table.hand.finished:
-            if room.game.table.winner:
+            if not room.can_continue():
                 room.game = None
+                for i, member in enumerate(room.members.values()):
+                    member.player_id, member.joined_hand = i, 1
                 room.notice = "大家同意重新组桌，已返回等候室。"
             else:
+                game = room.game
+                for sid, seat in room.seating_plan():
+                    member = room.members[sid]
+                    player = Player(seat, member.name, game.table.config.starting_stack)
+                    if seat == len(game.table.players):
+                        game.table.players.append(player)
+                        game.strategies.append("human")
+                    else:
+                        game.table.players[seat] = player
+                        game.strategies[seat] = "human"
+                    game.bots.pop(seat, None)
+                    game.player_wins.pop(seat, None)
+                    member.player_id, member.joined_hand = seat, game.table.hand_number + 1
                 room.game.table.start_hand()
                 room.notice = "全员准备，新一手开始。"
         else:
@@ -394,7 +484,7 @@ class RoomRegistry:
             now = self.clock()
             for code, room in list(self.rooms.items()):
                 if now - room.last_seen > 86400:
-                    for sid in room.members:
+                    for sid in [*room.members, *room.applicants]:
                         self.membership.pop(sid, None)
                     del self.rooms[code]
                     continue
@@ -406,7 +496,7 @@ class RoomRegistry:
                         room.notice = f"原房主暂时离线，{room.members[replacement].name} 接任房主。"
                         room.changed(now)
                 if room.recovering:
-                    if any(now - member.seen > ONLINE_SECONDS for member in room.members.values()):
+                    if any(now - room.members[sid].seen > ONLINE_SECONDS for sid in room.playing_members()):
                         continue
                     room.recovering = False
                     room.turn_key = None

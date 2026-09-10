@@ -54,7 +54,7 @@ class PokerServer(ThreadingHTTPServer):
                         continue
                     room = restore_room(data, now)
                     self.rooms.rooms[code] = room
-                    for sid in room.members:
+                    for sid in [*room.members, *room.applicants]:
                         if sid in self.rooms.membership:
                             raise ValueError("同一会话出现在多个存档房间中。")
                         self.rooms.membership[sid] = code
@@ -216,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = urlsplit(self.path).path.removeprefix("/api/")
         if route not in {"new", "action", "step", "next", "finish", "room/create", "room/join",
-                         "room/start", "room/leave", "room/rematch", "room/kick"}:
+                         "room/start", "room/leave", "room/rematch", "room/kick", "room/approve", "room/reject"}:
             self._json({"error": "未知操作。"}, 404)
             return
         try:

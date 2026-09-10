@@ -58,3 +58,9 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 .seat.turn-urgent .seat-action{color:#ffb4ac}
 .save-status{font-size:12px;color:var(--muted);margin:0 0 10px}
 .save-error{border:1px solid #cf7972;background:#472c31;color:#ffd4ce;border-radius:9px;padding:12px;margin:0 0 14px}
+
+.join-requests{border:1px solid #e8cb8766;border-radius:10px;background:#2d342a;padding:14px;margin:12px 0 18px}
+.join-request{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+.join-request small{display:block;color:var(--muted);font-size:12px}
+.request-buttons{display:flex;gap:8px;flex-shrink:0}
+@media(max-width:600px){.join-request{flex-wrap:wrap}.request-buttons{margin-left:auto}}

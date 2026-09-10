@@ -34,6 +34,9 @@ class RoomTests(unittest.TestCase):
 
     def join(self, sid):
         self.registry.perform(sid, "room/join", {"name": sid, "code": self.code})
+        room = self.registry.rooms[self.code]
+        if sid in room.applicants:
+            self.command(room.host, "room/approve", target_id=room.applicants[sid].member_id)
 
     def command(self, sid, route, **payload):
         state = self.registry.snapshot(sid)
@@ -58,8 +61,8 @@ class RoomTests(unittest.TestCase):
         self.assertEqual(self.registry.snapshot("friend")["room_info"]["ready_count"], 1)
         self.command("friend", "room/start")
         self.assertEqual(self.registry.snapshot("friend")["phase"], "playing")
-        with self.assertRaises(Conflict):
-            self.join("latecomer")
+        self.join("latecomer")
+        self.assertTrue(self.registry.snapshot("latecomer")["room_info"]["waiting_for_seat"])
 
     def test_room_capacity_duplicate_names_and_idempotent_join(self):
         self.join("friend")
@@ -497,6 +500,11 @@ class Client:
         _, state = self.request()
         return self.request(route, {"version": state["version"], "room_code": state.get("room_info", {}).get("code"), "round_id": state.get("room_info", {}).get("round_id"), **payload})
 
+    def approve(self, name):
+        _, state = self.request()
+        target = next(m["id"] for m in state["room_info"]["applications"] if m["name"] == name)
+        return self.command("room/approve", target_id=target)
+
 
 class MultiplayerHTTPTests(unittest.TestCase):
     def setUp(self):
@@ -521,6 +529,9 @@ class MultiplayerHTTPTests(unittest.TestCase):
         self.assertIn(f"192.168.1.20:{self.server.server_port}", room["room_info"]["join_url"])
         status, room = self.friend.request("room/join", {"name": "Bob", "code": code.lower()})
         self.assertEqual(status, 200)
+        self.assertEqual(room["phase"], "pending")
+        self.assertEqual(self.host.approve("Bob")[0], 200)
+        room = self.friend.request()[1]
         self.assertEqual(room["room_info"]["turn_seconds"], 30)
         self.assertNotEqual(self.host.cookie, self.friend.cookie)
         self.assertEqual(self.host.command("room/start")[0], 200)
@@ -530,7 +541,8 @@ class MultiplayerHTTPTests(unittest.TestCase):
         stranger = self.stranger.request()[1]
         self.assertEqual(stranger["phase"], "lobby")
         self.assertNotIn("players", stranger)
-        self.assertEqual(self.stranger.request("room/join", {"name": "Eve", "code": code})[0], 409)
+        self.assertEqual(self.stranger.request("room/join", {"name": "Eve", "code": code})[1]["phase"], "pending")
+        self.assertEqual(self.host.approve("Eve")[0], 409)
         self.assertEqual(self.host.command("action", kind="call", player_id=1)[0], 409)
         for _ in range(30):
             views = [self.host.request()[1], self.friend.request()[1]]
@@ -571,6 +583,7 @@ class MultiplayerHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         code = room["room_info"]["code"]
         self.assertEqual(self.friend.request("room/join", {"name": "Bob", "code": code})[0], 200)
+        self.assertEqual(self.host.approve("Bob")[0], 200)
         target = next(m["id"] for m in self.host.request()[1]["room_info"]["members"] if m["name"] == "Bob")
         self.assertEqual(self.host.command("room/kick", target_id=target)[0], 200)
         status, returned = self.friend.request()

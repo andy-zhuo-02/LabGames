@@ -88,7 +88,9 @@ def restore_game(data):
 def dump_room(room, now):
     data = {key: getattr(room, key) for key in ("code", "host", "capacity", "fill_bots", "bot_strategy", "turn_seconds", "version", "round_id", "notice")}
     data.update(ready=sorted(room.ready), banned=sorted(room.banned), last_seen=time.time() - (now - room.last_seen))
-    data["members"] = {sid: {"name": m.name, "player_id": m.player_id, "member_id": m.member_id} for sid, m in room.members.items()}
+    for key in ("members", "applicants"):
+        data[key] = {sid: {"name": m.name, "player_id": m.player_id, "member_id": m.member_id, "joined_hand": m.joined_hand}
+                     for sid, m in getattr(room, key).items()}
     data["game"] = dump_game(room.game) if room.game else None
     return data
 
@@ -98,6 +100,9 @@ def restore_room(data, now):
     room.version += 1
     room.last_seen = now - max(0, time.time() - data["last_seen"])
     room.members = {sid: Member(**member, seen=now - DISCONNECT_SECONDS - 1) for sid, member in data["members"].items()}
+    room.applicants = {sid: Member(**member, seen=now - DISCONNECT_SECONDS - 1) for sid, member in data.get("applicants", {}).items()}
+    if room.members.keys() & room.applicants.keys():
+        raise ValueError("存档中的申请者与成员重复。")
     room.ready, room.banned = set(data["ready"]), set(data["banned"])
     if room.host not in room.members or not room.ready <= room.members.keys():
         raise ValueError("存档中的房间成员不一致。")

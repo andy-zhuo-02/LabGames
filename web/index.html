@@ -32,6 +32,7 @@
       <div class="room-bar"><div><span class="eyebrow">好友同桌</span><h2>房间 <span id="room-code"></span></h2></div><button id="leave-room" class="outline">离开牌桌</button></div>
       <div class="invite-row"><label><span class="sr-only">邀请朋友的链接</span><input id="invite-url" readonly></label><button id="copy-invite">复制邀请链接</button></div>
       <p id="room-status" class="room-status" role="status"></p>
+      <section id="join-requests" class="join-requests" aria-label="待审批的入桌申请" hidden><h3>有人申请入桌</h3><p class="muted">批准后从下一手参与，初始 2,000 筹码。有空位时入座，AI 占位时下一手接替 AI。</p><div id="join-request-list"></div></section>
       <details id="members-panel" open><summary>牌友与准备状态 <span id="ready-count"></span></summary><div id="room-members" class="room-members"></div></details>
       <div id="waiting-room" hidden><h3>每个人都准备好，才开始发牌</h3><div class="waiting-footer"><p id="waiting-note"></p><button id="start-room" class="primary">我准备好了</button></div></div>
     </section>
@@ -100,7 +101,7 @@
     <label class="friend-name-label">你的昵称<input id="friend-name" maxlength="12" required autocomplete="nickname" placeholder="给朋友认得出的名字"></label>
     <div class="network-options">
       <section><h3>我来开一桌</h3><label>最多几人<select id="room-capacity"><option value="2">2 人</option><option value="3">3 人</option><option value="4" selected>4 人</option><option value="5">5 人</option><option value="6">6 人</option></select></label><label>每次思考时间<select id="room-turn-seconds"><option value="15">15 秒 · 快速</option><option value="30">30 秒</option><option value="60">60 秒</option><option value="90" selected>90 秒 · 默认</option><option value="120">120 秒 · 从容</option></select></label><p class="muted">每次行动单独计时，超时自动过牌或弃牌。</p><label class="checkbox-label"><input id="fill-bots" type="checkbox" checked>空位由 AI 补齐</label><label id="room-bot-label">补位 AI 风格<select id="room-bot"></select></label><button id="create-room" class="primary">创建房间</button></section>
-      <section><h3>去朋友的牌桌</h3><label>六位房间码<input id="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 ABC234"></label><p class="muted">也可以直接打开朋友发来的邀请链接。所有人点击准备后，自动开始发牌。</p><button id="join-room" class="primary">加入房间</button></section>
+      <section><h3>去朋友的牌桌</h3><label>六位房间码<input id="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 ABC234"></label><p class="muted">随时可以申请，房主同意后入桌。已经开局时，从下一手开始参与。</p><button id="join-room" class="primary">申请加入</button></section>
     </div>
     <p id="network-error" class="form-error" role="alert" hidden></p>
     <p class="setup-note">每个设备只显示自己的底牌。思考时限由创建房间的人选择；离线约 12 秒后自动过牌或弃牌。暂时离开可重连，主动离桌则由 AI 接替。</p>
