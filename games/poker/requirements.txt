@@ -1,0 +1,2 @@
+pokerkit==0.7.5
+qrcode==8.2

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#121c22">
+  <title>河牌俱乐部 · 和 AI 打一手</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="河牌俱乐部首页"><span class="brand-mark" aria-hidden="true">♠</span><span>河牌俱乐部<small>RIVER CLUB</small></span></a>
+    <div class="table-label"><span class="live-dot"></span><span id="room-label">你的私人牌桌</span></div>
+    <nav aria-label="游戏设置">
+      <button id="privacy-button" class="quiet" aria-pressed="false" title="仅在本浏览器遮住自己的底牌，鼠标移入或按住查看">隐私：关</button>
+      <details class="settings-menu"><summary>设置与帮助</summary><div>
+      <button id="sound-button" class="quiet" aria-pressed="false" title="开启或关闭行动提醒与游戏音效">音效：关</button>
+      <button id="help-button" class="quiet">怎么玩</button>
+      <button id="rankings-button" class="quiet">牌型大小</button>
+      </div></details>
+      <button id="friends-button" class="outline">和朋友玩</button>
+      <button id="room-button" class="outline">选牌桌</button>
+    </nav>
+  </header>
+
+  <main>
+    <div class="game-heading"><div><p class="eyebrow">坐下来，打几手。</p><h1 id="heading">今晚的牌局</h1></div><div class="game-meta"><span id="hand-label">无限注德州扑克</span><span>盲注 <b>10 / 20</b></span></div></div>
+    <div id="connection" class="connection" role="alert" hidden><span id="connection-message"></span><button id="retry-button" class="outline">重新连接</button></div>
+    <p id="save-status" class="save-status" hidden></p>
+    <p id="save-error" class="save-error" role="alert" hidden></p>
+    <details id="room-details" class="room-details" hidden><summary>房间管理与邀请</summary>
+    <section id="room-panel" class="room-panel" aria-label="好友房间" hidden>
+      <div class="room-bar"><div><span class="eyebrow">好友同桌</span><h2>房间 <span id="room-code"></span></h2></div><button id="leave-room" class="outline">离开牌桌</button></div>
+      <div class="invite-row"><label><span class="sr-only">邀请朋友的链接</span><input id="invite-url" readonly></label><button id="copy-invite">复制邀请链接</button></div>
+      <div id="room-tools" class="room-tools" hidden><button id="qr-button" class="outline">扫码邀请</button><button id="recovery-button" class="outline">我的座位恢复码</button><button id="away-button" class="outline">暂时离席</button></div>
+      <p id="room-status" class="room-status" role="status"></p>
+      <section id="join-requests" class="join-requests" aria-label="待审批的入桌申请" hidden><h3>有人申请入桌</h3><p class="muted">批准后从下一手参与，初始 2,000 筹码。有空位时入座，AI 占位时下一手接替 AI。</p><div id="join-request-list"></div></section>
+      <details id="members-panel" open><summary>牌友与准备状态 <span id="ready-count"></span></summary><div id="room-members" class="room-members"></div></details>
+      <div id="waiting-room" hidden><h3>每个人都准备好，才开始发牌</h3><div class="waiting-footer"><p id="waiting-note"></p><button id="start-room" class="primary">我准备好了</button></div></div>
+    </section>
+    </details>
+    <div class="game-layout">
+      <section class="play-area" aria-label="德州扑克桌">
+        <div id="arena" class="arena">
+          <div class="felt"><div class="felt-line"></div><span class="felt-wordmark" aria-hidden="true">RIVER CLUB</span></div>
+          <div class="table-center">
+            <p id="street-label" class="street-label">等你入座</p>
+            <div id="board" class="board" aria-label="公共牌"></div>
+            <div class="pot"><span class="chip-symbol" aria-hidden="true">◉</span><span>底池</span><strong id="pot-value">0</strong></div>
+            <p id="table-note" class="table-note">一副牌，几个有性格的牌友。</p>
+          </div>
+          <div id="seats"></div>
+        </div>
+        <section class="action-dock" aria-label="你的操作">
+          <div class="turn-header"><div><p id="turn-title" class="turn-title" role="status" tabindex="-1">正在准备牌桌…</p><p id="turn-hint" class="muted">每人 2,000 筹码，从容开始。</p></div><button id="hand-strength" class="hand-strength" aria-haspopup="dialog" title="查看牌型大小" hidden></button></div>
+          <p id="privacy-hint" class="privacy-hint" hidden>隐私模式 · 鼠标移到底牌查看，触屏按住查看；松开或移开即隐藏。</p>
+          <div id="controls"></div>
+          <div id="table-exit-bar" class="table-exit-bar" hidden><span id="table-ready-note"></span><button id="quick-leave-room" class="outline">离开牌桌</button></div>
+        </section>
+        <p class="table-footnote"><span>♠ ♥ ♣ ♦ &nbsp; 只管享受这一手</span><span>本地游玩 · 虚拟筹码</span></p>
+      </section>
+      <aside class="sidebar" aria-label="本次牌局记录">
+        <section class="session-panel"><div class="panel-title"><h2>今晚的战绩</h2><span class="live-dot"></span></div><div class="session-profit"><span>累计盈亏</span><strong id="session-profit">0</strong></div><div class="session-stats"><div><b id="hands-played">0</b><span>已玩手数</span></div><div><b id="hands-won">0</b><span>盈利手数</span></div></div></section>
+        <section class="activity-panel"><div class="panel-title"><h2>桌边动态</h2><label class="pace-label"><span class="sr-only">AI 行动速度</span><select id="pace"><option value="1200">悠闲</option><option value="800" selected>标准</option><option value="300">快速</option></select></label></div><ol id="activity" class="activity"><li class="empty-note">入座后，可以在这里回看每一步行动。</li></ol></section>
+        <details class="history-panel"><summary>最近的手牌 <span id="history-count">0</span></summary><div id="history" class="history"><p class="empty-note">打完第一手，故事就开始了。</p></div></details>
+        <details class="history-panel"><summary>本桌筹码曲线</summary><div id="chip-chart"></div></details>
+      </aside>
+    </div>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <button id="requests-button" class="requests-float" hidden>入桌申请</button>
+
+  <dialog id="lobby" aria-labelledby="lobby-title">
+    <form id="setup-form">
+      <div class="dialog-heading"><div><p class="eyebrow">找几个牌友，放松一下</p><h2 id="lobby-title">今晚，想打什么局？</h2></div><button type="button" id="close-lobby" class="icon-button" aria-label="返回当前牌桌" hidden>×</button></div>
+      <p class="dialog-intro">每人 2,000 筹码，盲注 10 / 20。选一种风格，坐下就能玩。</p>
+      <fieldset class="room-options"><legend class="sr-only">选择牌桌风格</legend>
+        <label class="room-option"><input type="radio" name="room" value="easy" checked><span class="room-icon" aria-hidden="true">♣</span><strong>轻松练手</strong><span>随性、爱跟注的牌友<br>熟悉规则，找到手感</span><em>推荐入门</em></label>
+        <label class="room-option"><input type="radio" name="room" value="normal"><span class="room-icon" aria-hidden="true">♦</span><strong>认真过招</strong><span>稳健与主动的组合<br>试着读懂对手的节奏</span><em>策略交锋</em></label>
+        <label class="room-option"><input type="radio" name="room" value="hard"><span class="room-icon" aria-hidden="true">♠</span><strong>挑战一下</strong><span>会算胜率的牌友<br>为每一次下注想一想</span><em>进阶体验</em></label>
+      </fieldset>
+      <div class="setup-fields"><label>你的称呼<input id="player-name" name="name" maxlength="12" placeholder="你" autocomplete="nickname"></label><label>牌桌人数<select id="player-count"><option value="2">2 人 · 单挑</option><option value="3" selected>3 人 · 刚刚好</option><option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人 · 热闹一桌</option></select></label></div>
+      <details id="customize"><summary>自己挑选 AI 牌友</summary><div id="opponent-picker" class="opponent-picker"></div></details>
+      <p id="setup-note" class="setup-note">无需注册。AI 只知道自己的底牌和桌上的公开信息。</p>
+      <p id="setup-error" class="form-error" role="alert" hidden></p>
+      <button id="start-button" type="submit" class="primary start-button">入座，开始玩 <span aria-hidden="true">→</span></button>
+      <button id="lobby-friends" type="button" class="outline start-button" style="margin-top:12px">想和朋友一起玩？创建或加入房间</button>
+    </form>
+  </dialog>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <div class="dialog-heading"><div><p class="eyebrow">边玩边学就好</p><h2 id="help-title">一手德州，怎么打？</h2></div><button class="icon-button" data-close="help" aria-label="关闭玩法说明">×</button></div>
+    <ol class="how-to"><li><b>先看自己的两张牌</b><p>你的底牌只有你能看到。小盲和大盲先投入 10 / 20 筹码，然后轮流行动。</p></li><li><b>选择留下，还是等待下一手</b><p>“过牌”不花筹码；“跟注”补齐当前下注；“加注”提高本轮总下注；“弃牌”放弃本手。“全下”投入你剩下的全部筹码。</p></li><li><b>公共牌分三次发出</b><p>翻牌 3 张 → 转牌 1 张 → 河牌 1 张。每个阶段都有一轮下注。用两张底牌和五张公共牌，选出最好的五张组合，也可以完全使用公共牌。</p></li><li><b>留下来的玩家比大小</b><p>牌型相同时比较点数和踢脚牌；完全相同则平分。如果其他人都弃牌，你直接赢得底池。全下时会按投入金额处理边池。</p></li></ol>
+    <div class="help-box"><h3>什么时候会亮底牌？</h3><p>这张休闲牌桌在摊牌时，会亮出所有未弃牌玩家的底牌，包括输掉本手的玩家。中途弃牌的底牌不公开。</p><p class="muted">如果其他人都弃牌，最后留下的玩家直接赢得底池，无需亮牌。即使五张公共牌都已发完，也可能这样结束。</p></div>
+    <div class="help-box"><h3>牌型从大到小</h3><p>同花顺 › 四条 › 葫芦 › 同花 › 顺子 › 三条 › 两对 › 一对 › 高牌</p><p class="muted">A 可作最大点数，也可以在 A–2–3–4–5 中作最小点数。四种花色大小相同。</p></div>
+    <div class="help-box"><h3>看懂桌上的标记</h3><p><b>D / BTN</b> 庄家位置，每手轮换 · <b>SB</b> 小盲 · <b>BB</b> 大盲</p><p class="muted">“加到 100”指本轮总下注到 100。按钮旁会标明还需投入多少。你的“当前牌型”只是已发牌面的组合，并不代表一定能赢。</p></div>
+    <div class="help-box"><h3>防止身边的人看到底牌</h3><p>开启顶部“隐私”后，自己的底牌显示为牌背，鼠标移入才亮牌；触屏按住查看，键盘可用 Tab 选中底牌后按住空格键查看。松开、移开或切走窗口会收起牌面。</p><p class="muted">设置保存在本浏览器中，结算区自己的底牌和当前牌型也会遮住。正常摊牌时，其他玩家仍会按规则看到已公开的牌。</p></div>
+    <button class="primary start-button" data-close="help">明白了，回牌桌</button>
+  </dialog>
+
+  <dialog id="all-in-dialog" class="small-dialog" aria-labelledby="all-in-title"><h2 id="all-in-title">把筹码推到中间？</h2><p id="all-in-copy"></p><div class="dialog-actions"><button class="outline" data-close="all-in-dialog">再想一下</button><button id="confirm-all-in" class="primary">确认全下</button></div></dialog>
+  <dialog id="rankings-dialog" aria-labelledby="rankings-title"><div class="dialog-heading"><div><p class="eyebrow">从强到弱，一眼看懂</p><h2 id="rankings-title">牌型大小速查</h2></div><button class="icon-button" data-close="rankings-dialog" aria-label="关闭牌型提示">×</button></div><div id="rankings-list" class="rankings-list"></div><p class="muted">同类牌型先比较组成牌型的点数，再依次比较踢脚牌；完全相同则平分。花色不分大小。A–2–3–4–5 是最小顺子，皇家同花顺是最大的同花顺。</p><p class="muted">WIN 表示赢得主池或边池；平分或多人分别赢得边池时，会有多名赢家。净盈亏仍以结算金额为准。</p><button class="primary start-button" data-close="rankings-dialog">回到牌桌</button></dialog>
+  <dialog id="network-dialog" aria-labelledby="network-title">
+    <div class="dialog-heading"><div><p class="eyebrow">同一个 Wi-Fi，同一张牌桌</p><h2 id="network-title">叫上朋友，坐到一起</h2></div><button class="icon-button" data-close="network-dialog" aria-label="关闭好友房间窗口">×</button></div>
+    <p id="network-hint" class="dialog-intro">一个人创建房间，其他人打开邀请链接或输入房间码加入。</p>
+    <label class="friend-name-label">你的昵称<input id="friend-name" maxlength="12" required autocomplete="nickname" placeholder="给朋友认得出的名字"></label>
+    <div class="network-options">
+      <section><h3>我来开一桌</h3><label>最多几人<select id="room-capacity"><option value="2">2 人</option><option value="3">3 人</option><option value="4" selected>4 人</option><option value="5">5 人</option><option value="6">6 人</option></select></label><label>每次思考时间<select id="room-turn-seconds"><option value="15">15 秒 · 快速</option><option value="30">30 秒</option><option value="60">60 秒</option><option value="90" selected>90 秒 · 默认</option><option value="120">120 秒 · 从容</option></select></label><p class="muted">每次行动单独计时，超时自动过牌或弃牌。</p><label class="checkbox-label"><input id="fill-bots" type="checkbox" checked>空位由 AI 补齐</label><label id="room-bot-label">补位 AI 风格<select id="room-bot"></select></label><button id="create-room" class="primary">创建房间</button></section>
+      <section><h3>去朋友的牌桌</h3><label>六位房间码<input id="join-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 ABC234"></label><p class="muted">随时可以申请，房主同意后入桌。已经开局时，从下一手开始参与。</p><button id="join-room" class="primary">申请加入</button></section>
+    </div>
+    <details class="recover-form"><summary>最近房间 / 找回原座位</summary><div id="recent-rooms" class="room-tools"></div><p class="muted">先填写上方房间码。换浏览器后，输入此前保存的座位恢复码，找回筹码和身份；旧浏览器会退出。</p><label>座位恢复码<input id="recover-input" maxlength="32" autocomplete="off" spellcheck="false" type="password"></label><button id="recover-seat" class="outline">找回原座位</button></details>
+    <p id="network-error" class="form-error" role="alert" hidden></p>
+    <p class="setup-note">每个设备只显示自己的底牌。思考时限由创建房间的人选择；离线约 12 秒后自动过牌或弃牌。暂时离开可重连，主动离桌则由 AI 接替。</p>
+  </dialog>
+  <dialog id="leave-room-dialog" class="small-dialog" aria-labelledby="leave-room-title"><h2 id="leave-room-title">要离开这张牌桌吗？</h2><p>确认后立即离桌，AI 会接替你的座位，其他人无需等待思考计时结束。暂时断线或刷新页面不需要退出房间。</p><div class="dialog-actions"><button class="outline" data-close="leave-room-dialog">留下继续玩</button><button id="confirm-leave-room" class="primary">确认离桌</button></div></dialog>
+  <dialog id="kick-dialog" class="small-dialog" aria-labelledby="kick-title"><h2 id="kick-title">移出这位牌友？</h2><p id="kick-copy"></p><div class="dialog-actions"><button class="outline" data-close="kick-dialog">取消</button><button id="confirm-kick" class="primary">确认移出</button></div></dialog>
+  <dialog id="away-dialog" class="small-dialog" aria-labelledby="away-title"><h2 id="away-title">暂时离开一下？</h2><p>座位和筹码会保留。本手轮到你时自动过牌或弃牌，之后不再发牌。回来后点击“回到牌桌”并重新准备即可。</p><div class="dialog-actions"><button class="outline" data-close="away-dialog">继续玩</button><button id="confirm-away" class="primary">确认暂离</button></div></dialog>
+  <dialog id="qr-dialog" class="small-dialog" aria-labelledby="qr-title"><h2 id="qr-title">扫码申请入桌</h2><p>朋友连接同一 Wi-Fi 后扫码，房主同意即可加入。</p><img id="invite-qr" alt="当前房间邀请二维码" width="260" height="260"><p id="qr-error" role="alert" hidden>二维码暂时加载失败。请检查连接，或返回房间复制邀请链接。</p><button class="primary" data-close="qr-dialog">回到牌桌</button></dialog>
+  <dialog id="recovery-dialog" class="small-dialog" aria-labelledby="recovery-title"><h2 id="recovery-title">保存你的座位恢复码</h2><p>复制保存这串字符。换浏览器后可找回原座位、筹码和房主身份；每次找回后会换成新码。请勿把它当邀请链接分享。</p><label>恢复码<input id="recovery-code" readonly autocomplete="off" spellcheck="false"></label><div class="dialog-actions"><button id="copy-recovery" class="primary">复制恢复码</button><button class="outline" data-close="recovery-dialog">返回牌桌</button></div></dialog>
+  <noscript>请在浏览器中启用 JavaScript 后开始游戏。</noscript>
+</body>
+</html>

@@ -1,0 +1,754 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (value) => Number(value).toLocaleString("zh-CN");
+const signed = (value) => `${value > 0 ? "+" : ""}${fmt(value)}`;
+const profitClass = (value) => value > 0 ? "positive" : value < 0 ? "negative" : "";
+const prefs = {
+  get(key, fallback) { try { return localStorage.getItem(`river.${key}`) ?? fallback; } catch { return fallback; } },
+  set(key, value) { try { localStorage.setItem(`river.${key}`, value); } catch { /* Private browsing can disable storage. */ } },
+};
+const ROOMS = {
+  easy: {name:"轻松练手", bots:["calling_station","random","loose","calling_station","random"]},
+  normal: {name:"认真过招", bots:["tight","loose","push_fold","random","tight"]},
+  hard: {name:"挑战一下", bots:["equity","nit","loose","tight","push_fold"]},
+};
+const BET_FRACTIONS = [[1 / 4, "¼ 底池"], [1 / 3, "⅓ 底池"], [1 / 2, "½ 底池"], [2 / 3, "⅔ 底池"], [3 / 4, "¾ 底池"], [1, "底池"]];
+const POSITIONS = {
+  2:[[50,85],[50,14]],
+  3:[[50,85],[23,20],[77,20]],
+  4:[[50,85],[18,42],[50,12],[82,42]],
+  5:[[50,86],[17,60],[27,16],[73,16],[83,60]],
+  6:[[50,87],[17,65],[20,24],[50,10],[80,24],[83,65]],
+};
+let state = null, busy = false, offline = false, botTimer = null, toastTimer = null;
+let raiseTo = 0, raiseVersion = -1, audioContext = null;
+let sound = prefs.get("sound", "off") === "on";
+let privacy = prefs.get("privacy", "off") === "on";
+let peekTarget = null, peekPointer = null, privacyContext = null;
+let pollTimer = null, polling = false, mutationEpoch = 0, lastControlsKey = null, pendingAllIn = null;
+let pendingKick = null, departureSeen = null;
+let deadlineAt = 0, announcedTurn = null;
+let seenApplications = new Set(), historyRenderKey = null;
+const multiplayer = () => state?.mode === "multiplayer";
+const viewerId = () => state ? state.viewer_id : 0;
+const heroPlayer = () => state.players.find((player) => player.id === viewerId());
+const scope = (snapshot = state) => snapshot?.room_info?.code || "solo";
+const actionScope = (snapshot = state) => [snapshot?.server_id, scope(snapshot), snapshot?.room_info?.round_id,
+  snapshot?.viewer_id, snapshot?.hand_number, snapshot?.action_number, snapshot?.actor_id].join(":");
+
+function card(code, hidden = false) {
+  if (hidden) return '<span class="card back" role="img" aria-label="未公开的底牌"></span>';
+  if (!code) return '<span class="card empty" aria-hidden="true">·</span>';
+  const rank = code[0] === "T" ? "10" : code[0];
+  const suit = {s:"♠",h:"♥",d:"♦",c:"♣"}[code[1]];
+  const suitName = {s:"黑桃",h:"红桃",d:"方块",c:"梅花"}[code[1]];
+  return `<span class="card ${"hd".includes(code[1]) ? "red" : ""}" role="img" aria-label="${esc(suitName + rank)}"><span class="rank">${esc(rank)}</span><span class="suit">${suit}</span><span class="large-suit" aria-hidden="true">${suit}</span></span>`;
+}
+
+function privateCards(codes) {
+  return `<span class="private-front">${codes.map((code) => card(code)).join("")}</span><span class="private-back">${card(null, true).repeat(codes.length)}</span>`;
+}
+function hidePrivateCards() {
+  document.body.classList.remove("peeking");
+  peekTarget = null; peekPointer = null;
+}
+function peekCards(target, pointer = null) {
+  if (!privacy || !target?.classList.contains("private-cards") || document.hidden || !document.hasFocus() || hasModal()) return;
+  peekTarget = target; peekPointer = pointer;
+  document.body.classList.add("peeking");
+}
+function renderPrivacy() {
+  const hero = state?.players?.find((player) => player.id === viewerId());
+  const context = `${scope()}:${viewerId()}:${state?.hand_number}:${state?.phase}:${hero?.cards.join(",")}`;
+  // Room polling must not reopen cards; a new hand always starts face down.
+  if (context !== privacyContext || (peekTarget && !peekTarget.isConnected)) hidePrivateCards();
+  privacyContext = context;
+  document.body.classList.toggle("privacy-mode", privacy);
+  $("privacy-button").textContent = `隐私：${privacy ? "开" : "关"}`;
+  $("privacy-button").setAttribute("aria-pressed", String(privacy));
+  $("privacy-hint").hidden = !privacy || !hero?.cards.length;
+}
+function updateHTML(element, html) {
+  if (element.innerHTML !== html) {
+    if (peekTarget && element.contains(peekTarget)) hidePrivateCards();
+    element.innerHTML = html;
+  }
+}
+function notify(message) {
+  $("toast").textContent = message; $("toast").hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4200);
+}
+function playSound(kind = "action") {
+  if (!sound) return;
+  try {
+    audioContext ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+    const now = audioContext.currentTime;
+    (kind === "win" ? [523,659,784] : kind === "turn" ? [660,880] : [530]).forEach((frequency, index) => {
+      const oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
+      const start = now + index * .1;
+      oscillator.frequency.value = frequency; oscillator.type = "sine";
+      gain.gain.setValueAtTime(0, start); gain.gain.linearRampToValueAtTime(.045, start + .01);
+      gain.gain.exponentialRampToValueAtTime(.001, start + .12);
+      oscillator.connect(gain); gain.connect(audioContext.destination);
+      oscillator.start(start); oscillator.stop(start + .13);
+    });
+  } catch { /* Audio is optional. */ }
+}
+function acceptState(snapshot) {
+  state = snapshot;
+  deadlineAt = performance.now() + (state.room_info?.remaining_ms || 0);
+  const myTurn = state.phase === "playing" && state.actor_id === viewerId() && !state.room_info?.recovering && !state.room_info?.away;
+  const key = myTurn ? `${state.server_id}:${scope()}:${state.room_info?.round_id}:${state.hand_number}:${state.action_number}:${state.actor_id}` : null;
+  const newTurn = key !== null && key !== announcedTurn;
+  announcedTurn = key;
+  if (newTurn) playSound("turn");
+  const applications = state.room_info?.applications || [];
+  const current = new Set(applications.map(a => `${scope()}:${a.id}`));
+  if (applications.some(a => !seenApplications.has(`${scope()}:${a.id}`))) notify(`有 ${applications.length} 位牌友等待审批，点击“入桌申请”处理。`);
+  seenApplications = current;
+  if (state.room_info && !state.room_info.pending_approval) rememberRoom(state.room_info.code);
+  return newTurn;
+}
+function recentRooms() {
+  try { const rooms = JSON.parse(prefs.get("rooms", "[]")); return Array.isArray(rooms) ? rooms.filter(r => /^[A-Z2-9]{6}$/.test(r.code)).slice(0, 5) : []; }
+  catch { return []; }
+}
+function rememberRoom(code) {
+  const rooms = recentRooms();
+  if (rooms[0]?.code !== code) prefs.set("rooms", JSON.stringify([{code}, ...rooms.filter(r => r.code !== code)].slice(0, 5)));
+}
+function renderCountdown() {
+  const paused = offline || state?.room_info?.recovering;
+  const seconds = Math.max(0, Math.ceil((deadlineAt - performance.now()) / 1000));
+  document.querySelectorAll("[data-turn-countdown]").forEach((badge) => {
+    const player = state?.players?.find((p) => p.id === Number(badge.dataset.turnCountdown));
+    const active = multiplayer() && state.phase === "playing" && player?.id === state.actor_id && player.strategy === "human";
+    badge.hidden = !active;
+    const running = active && !paused;
+    badge.textContent = running ? `${seconds}s` : "Ⅱ";
+    badge.setAttribute("aria-label", running ? `${player.name}剩余 ${seconds} 秒` : "等待重新连接");
+    badge.closest(".seat").classList.toggle("turn-urgent", running && seconds <= 5);
+  });
+}
+function renderStorage() {
+  const storage = state?.storage, label = $("save-status");
+  label.hidden = !storage;
+  label.textContent = storage?.enabled ? storage.ok ? "自动存档已开启" : "自动存档失败" : "本次未开启存档";
+  label.title = storage?.saved_at ? `最近保存：${new Date(storage.saved_at * 1000).toLocaleTimeString("zh-CN")}` : "";
+  $("save-error").hidden = !storage?.error;
+  $("save-error").textContent = storage?.error || "";
+}
+function hasModal() { return [...document.querySelectorAll("dialog")].some((dialog) => dialog.open); }
+function openDialog(id) { hidePrivateCards(); clearTimeout(botTimer); $(id).showModal(); }
+function closeDialog(id) { $(id).close(); scheduleBot(); }
+
+async function timedFetch(url, options = {}, timeout = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try { return await fetch(url, {...options, signal:controller.signal}); }
+  finally { clearTimeout(timer); }
+}
+
+async function request(route = "state", payload = null) {
+  if (busy) return false;
+  mutationEpoch += 1;
+  busy = true; clearTimeout(botTimer); renderControls(); $("start-button").disabled = true;
+  let ok = false;
+  try {
+    const response = await timedFetch(`/api/${route}`, {
+      method: payload ? "POST" : "GET", cache:"no-store",
+      headers: payload ? {"Content-Type":"application/json", "X-Poker-Client":"1"} : {},
+      body: payload ? JSON.stringify({...payload, server_id:state?.server_id, version:state?.version, room_code:state?.room_info?.code, round_id:state?.room_info?.round_id}) : undefined,
+    });
+    const data = await response.json();
+    if (data.state) acceptState(data.state);
+    if (!response.ok) {
+      if ($("network-dialog").open) { $("network-error").textContent = data.error; $("network-error").hidden = false; }
+      if (route === "new") { $("setup-error").textContent = data.error; $("setup-error").hidden = false; }
+      else notify(data.error || "操作没有完成，请重试。");
+    } else {
+      const previousVersion = state?.version;
+      if (route === "new") { raiseVersion = null; lastControlsKey = null; historyRenderKey = null; }
+      const newTurn = acceptState(data); ok = true;
+      if (route === "room/leave") history.replaceState(null, "", location.pathname);
+      if (!newTurn && payload && route !== "new" && state.version !== previousVersion) playSound(state.result?.profit > 0 ? "win" : "action");
+    }
+    offline = response.status >= 500;
+    $("connection").hidden = !offline;
+    if (offline) $("connection-message").textContent = "牌桌暂时无法完成操作，已暂停自动行动。请重新连接后继续。";
+  } catch {
+    offline = true;
+    $("connection-message").textContent = "暂时连不上牌桌。请确认游戏启动窗口仍在运行，再重新连接。";
+    $("connection").hidden = false;
+    if ($("lobby").open) { $("setup-error").textContent = "连接未完成，请稍后重试。启动游戏的窗口需要保持运行。"; $("setup-error").hidden = false; }
+    notify("连接暂时中断，重新连接后会恢复牌桌。");
+  } finally {
+    busy = false; $("start-button").disabled = false;
+    render(); scheduleBot(); schedulePoll();
+  }
+  return ok;
+}
+
+function scheduleBot() {
+  clearTimeout(botTimer);
+  if (multiplayer() || busy || offline || hasModal() || document.hidden || state?.phase !== "playing" || state.actor_id === viewerId()) return;
+  botTimer = setTimeout(() => request("step", {}), Number($("pace").value));
+}
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  if (multiplayer()) pollTimer = setTimeout(pollRoom, document.hidden ? 1500 : 800);
+}
+async function pollRoom() {
+  if (!multiplayer()) return;
+  if (busy || polling) { schedulePoll(); return; }
+  polling = true;
+  const epoch = mutationEpoch;
+  try {
+    const response = await timedFetch("/api/state", {cache:"no-store"}, 10000);
+    if (!response.ok) throw new Error("Connection unavailable");
+    const data = await response.json();
+    if (busy || epoch !== mutationEpoch) return;
+    if (data.server_id === state.server_id && scope(data) === scope() && data.version < state.version) return;
+    const changed = data.version !== state.version;
+    const newTurn = acceptState(data); offline = false; $("connection").hidden = true;
+    if (changed && !newTurn) playSound(state.result?.profit > 0 ? "win" : "action");
+    render();
+  } catch {
+    if (epoch !== mutationEpoch) return;
+    offline = true;
+    $("connection-message").textContent = "与房间的连接暂时中断，正在重新连接。请保持同一 Wi-Fi；恢复后会回到你的座位。";
+    $("connection").hidden = false; renderControls(); renderRoom();
+  } finally { polling = false; schedulePoll(); scheduleBot(); }
+}
+
+function renderSeats(players, current) {
+  const readyPlayers = new Set(multiplayer() && state.phase === "finished"
+    ? state.room_info.members.filter((member) => member.ready && member.needs_ready).map((member) => member.player_id)
+    : []);
+  const viewerIndex = players.findIndex((player) => player.id === viewerId());
+  if (viewerIndex > 0) players = [...players.slice(viewerIndex), ...players.slice(0, viewerIndex)];
+  const positions = POSITIONS[players.length];
+  // Keep seat elements stable, so new actions do not animate every card again.
+  if ($("seats").children.length !== players.length) {
+    $("seats").replaceChildren(...players.map(() => { const el = document.createElement("div"); el.className = "seat"; return el; }));
+  }
+  players.forEach((player, index) => {
+    const el = $("seats").children[index];
+    const ready = player.strategy === "human" && readyPlayers.has(player.id);
+    el.className = `seat ${player.id === viewerId() ? "hero" : ""} ${player.id === current ? "active" : ""} ${player.folded ? "folded" : ""} ${player.eliminated ? "eliminated" : ""} ${player.is_winner ? "winner" : ""} ${ready ? "seat-ready" : ""}`;
+    el.style.setProperty("--x", `${positions[index][0]}%`); el.style.setProperty("--y", `${positions[index][1]}%`);
+    el.style.setProperty("--avatar", player.color);
+    let status = player.eliminated ? "已离桌" : player.folded ? "已弃牌" : player.all_in ? "全下" : player.id === current ? player.id === viewerId() ? "轮到你了" : player.strategy === "human" ? "正在选择动作…" : "正在思考…" : player.last_action || "等待行动";
+    if (multiplayer() && player.strategy === "human" && !player.online) status += " · 离线";
+    if (state?.phase === "finished") {
+      const revealed = state.result.shown_hands.some((hand) => hand.player_id === player.id);
+      if (revealed) status = player.eliminated ? "已摊牌 · 筹码用尽" : "已摊牌";
+      else if (player.folded) status = "已弃牌 · 不参与摊牌";
+      else if (!player.eliminated && state.result.end_reason === "folds") status = "无需摊牌";
+    }
+    if (player.away) status = "暂离 · 保留座位";
+    else if (player.waiting_for_hand) status = "等待下一手发牌";
+    const position = player.position.includes("BTN") ? player.position === "BTN/SB" ? "D / SB" : "D" : player.position;
+    const ownCards = player.id === viewerId() && player.cards.length > 0;
+    const cards = player.eliminated && !player.cards.length ? "" : ownCards ? privateCards(player.cards) : player.cards.length ? player.cards.map((c) => card(c)).join("") : card(null,true).repeat(2);
+    if (!el.children.length) el.innerHTML = '<div class="hole-cards"></div><div class="seat-box"></div><div class="seat-action"></div><span class="seat-bet"></span>';
+    const holes = el.querySelector(".hole-cards");
+    holes.classList.toggle("private-cards", ownCards);
+    holes.tabIndex = ownCards && privacy ? 0 : -1;
+    holes.setAttribute("role", "group");
+    holes.setAttribute("aria-label", `${player.name}的底牌${ownCards && privacy ? "，按住空格键查看" : ""}`);
+    updateHTML(holes, cards);
+    updateHTML(el.querySelector(".seat-box"), `${player.is_winner ? `<span class="win-badge seat-win" title="赢得底池 ${fmt(player.won_amount)}">WIN</span>` : ""}<div class="seat-top"><span class="avatar-wrap"><span class="avatar" aria-hidden="true">${esc(player.avatar)}</span><span class="turn-countdown" data-turn-countdown="${player.id}" hidden></span></span><div><div class="seat-name" title="${esc(player.name)}">${esc(player.name)}${player.id === viewerId() && player.name !== "你" ? " · 你" : ""}</div><div class="seat-style">${esc(player.style)}</div></div></div><div class="seat-money">${fmt(player.stack)}</div>${position ? `<span class="position ${position.includes("D") ? "dealer" : ""}" title="${esc(player.position)}">${esc(position)}</span>` : ""}`);
+    updateHTML(el.querySelector(".seat-action"), ready ? `<span class="ready-badge"${!player.online ? ' title="已保留准备状态，等待重连"' : ""}>✓ 已准备${!player.online ? " · 离线" : ""}</span>` : esc(status));
+    el.querySelector(".seat-bet").hidden = !player.bet;
+    el.querySelector(".seat-bet").textContent = `◉ ${fmt(player.bet || 0)}`;
+  });
+  $("arena").dataset.count = players.length;
+  renderCountdown();
+}
+
+function render() {
+  document.body.classList.toggle("live-hand", state?.phase === "playing");
+  renderStorage();
+  renderPrivacy();
+  if (state?.room_exit && departureSeen !== state.room_exit.code) {
+    departureSeen = state.room_exit.code;
+    history.replaceState(null, "", location.pathname);
+    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+    notify(state.room_exit.message);
+  }
+  $("sound-button").textContent = `音效：${sound ? "开" : "关"}`;
+  $("sound-button").setAttribute("aria-pressed", String(sound));
+  renderRoom();
+  if (["waiting", "pending"].includes(state?.phase)) return;
+  const playing = state && state.phase !== "lobby";
+  $("close-lobby").hidden = !playing;
+  $("room-button").textContent = playing ? "换牌桌" : "选牌桌";
+  if (!playing) {
+    updateHTML($("board"), Array.from({length:5}, () => card(null)).join(""));
+    renderSeats([
+      {id:0,name:"你",avatar:"你",style:"真人",color:"#e8cb87",stack:2000,position:"",cards:[]},
+      {id:1,name:"阿豆",avatar:"豆",style:"爱跟注",color:"#82c5a9",stack:2000,position:"",cards:[]},
+      {id:2,name:"米粒",avatar:"米",style:"随性派",color:"#b78cea",stack:2000,position:"",cards:[]},
+    ], null);
+    if (state?.phase === "lobby" && !hasModal()) {
+      if (state.network?.enabled || new URLSearchParams(location.search).has("room")) showNetwork();
+      else showLobby();
+    }
+    renderControls(); return;
+  }
+  $("room-label").textContent = `${state.room} · ${state.players.length} 人桌`;
+  $("heading").textContent = state.room;
+  $("hand-label").textContent = `第 ${state.hand_number} 手`;
+  $("street-label").textContent = state.phase === "finished" ? "本手结算" : state.street_name;
+  $("pot-value").textContent = fmt(state.result ? state.result.pot : state.pot);
+  $("table-note").textContent = state.phase === "finished" ? state.result.end_reason === "folds" ? "其他玩家均弃牌 · 无需摊牌" : "摊牌结束 · 筹码已结算" : "翻牌 3 张  ·  转牌 1 张  ·  河牌 1 张";
+  // Patch individual community slots: only newly dealt cards animate.
+  if ($("board").children.length !== 5) $("board").innerHTML = Array.from({length:5}, () => card(null)).join("");
+  for (let index = 0; index < 5; index++) {
+    const current = $("board").children[index], code = state.board[index] || "";
+    if (current.dataset.card !== code) { current.outerHTML = card(code); $("board").children[index].dataset.card = code; }
+  }
+  renderSeats(state.players, state.actor_id);
+  $("session-profit").textContent = signed(state.stats.profit); $("session-profit").className = profitClass(state.stats.profit);
+  $("hands-played").textContent = state.stats.hands; $("hands-won").textContent = state.stats.wins;
+  updateHTML($("activity"), state.actions.length ? state.actions.slice().reverse().map((a) => `<li><small>${esc(a.street)}</small><b>${esc(a.player)}</b><span>${esc(a.description)}</span></li>`).join("") : '<li class="empty-note">盲注已就位，底牌已发出。<br>好戏开场。</li>');
+  $("history-count").textContent = state.history.length;
+  renderHistory();
+  renderControls();
+}
+
+function renderControls() {
+  if (["waiting", "pending"].includes(state?.phase)) return;
+  const key = JSON.stringify([actionScope(), state?.phase, state?.legal, busy, offline, privacy,
+    state?.room_info?.away, state?.room_info?.recovering, state?.room_info?.waiting_for_seat,
+    state?.phase === "finished" ? state?.version : null, state?.room_info?.waiting_message]);
+  if (key === lastControlsKey) return;
+  lastControlsKey = key;
+  const container = $("controls"), strength = $("hand-strength");
+  strength.hidden = !state?.hand_type;
+  updateHTML(strength, state?.hand_type ? `<span class="private-detail">当前牌型 · ${esc(state.hand_type)}</span><span class="privacy-cover">底牌已隐藏</span>` : "");
+  if (!state || state.phase === "lobby") {
+    $("turn-title").textContent = offline ? "等待连接" : "你的座位已经留好";
+    $("turn-hint").textContent = "选几个合拍的牌友，开始今晚的第一手。";
+    updateHTML(container, '<button class="primary" id="join-table">选择牌桌 →</button>');
+    $("join-table").onclick = showLobby; return;
+  }
+  const hero = heroPlayer() || {stack:0}, disabled = busy || offline;
+  if (state.room_info?.away) {
+    $("turn-title").textContent = "暂离中，座位和筹码已保留";
+    $("turn-hint").textContent = "本手轮到你时自动过牌或弃牌，之后不发牌。回来后重新准备即可参与。";
+    updateHTML(container, `<button id="return-to-table" class="primary" ${disabled ? "disabled" : ""}>回到牌桌</button>`);
+    $("return-to-table").onclick = () => request("room/away", {away:false});
+    return;
+  }
+  if (state.room_info?.recovering) {
+    $("turn-title").textContent = "牌局已恢复，等待重连";
+    $("turn-hint").textContent = `${state.room_info.waiting_message}。到齐后继续本手，重新计算思考时间。`;
+    updateHTML(container, '<div class="waiting">筹码和底牌已保留。无法回来的牌友，可由房主在房间信息中移出。</div>');
+    return;
+  }
+  if (state.room_info?.waiting_for_seat && state.phase !== "finished") {
+    $("turn-title").textContent = "房主已批准，下一手入座";
+    $("turn-hint").textContent = `本手先观战。结算后点击准备，以 ${fmt(state.room_info.starting_stack)} 筹码参与下一手。`;
+    updateHTML(container, '<div class="waiting">你的座位已预留，本手其他玩家继续行动。</div>');
+    return;
+  }
+  if (state.phase === "finished") {
+    const result = state.result;
+    $("turn-title").textContent = result.match_over ? result.hero_won_table ? "你是这一桌的最后赢家！" : "今晚这一桌，先到这里" : result.title;
+    $("turn-hint").textContent = `本手 ${signed(result.profit)} 筹码${result.match_over && hero.stack === 0 ? " · 重新开桌，就能再来一局" : " · 按你的节奏，准备好了再发牌"}`;
+    const payouts = result.payouts.map((p) => payoutHTML(p)).join("");
+    const hands = result.shown_hands.map((h) => {
+      const own = h.player_id === viewerId();
+      return `<div class="showdown-hand"><div class="showdown-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} role="group" aria-label="${esc(h.name)}的摊牌${own && privacy ? "，按住空格键查看" : ""}">${own ? privateCards(h.cards) : h.cards.map((code) => card(code)).join("")}</div><div class="showdown-player"><b title="${esc(h.name)}">${esc(h.name)}</b>${result.winner_ids?.includes(h.player_id) ? '<span class="win-badge">WIN</span> ' : ""}<span class="${own ? "private-detail" : ""}">${esc(h.comparison || h.hand_type)}</span>${own ? '<span class="privacy-cover">底牌已隐藏</span>' : ""}</div>${bestCardsHTML(h)}</div>`;
+    }).join("");
+    const returns = result.returned_bets.map((bet) => `${esc(bet.name)}退回 ${fmt(bet.amount)}`).join("、");
+    updateHTML(container, `<div class="result-row"><div class="result-detail">${payouts}${returns ? `<p class="muted">未被跟注：${returns}</p>` : ""}</div><button id="next-hand" class="primary" ${disabled ? "disabled" : ""}>${result.match_over ? "再开一桌" : "下一手 →"}</button></div><p class="result-explanation">${esc(result.explanation || "本手已结算，以下为已亮出的底牌。")}</p>${hands ? `<section class="showdown-list" aria-label="本手摊牌对比">${hands}</section>` : ""}`);
+    if (multiplayer()) {
+      const room = state.room_info;
+      $("next-hand").disabled = disabled || !room.can_ready;
+      $("next-hand").textContent = !room.can_ready ? "继续观战" : room.ready ? "取消准备" : result.match_over ? "同意重新组桌" : "准备下一手";
+      $("turn-hint").textContent = `${room.waiting_for_seat ? "本手未参与 · 准备后入座" : `本手 ${signed(result.profit)} 筹码`} · 已准备 ${room.ready_count}/${room.ready_total} · ${room.waiting_message}`;
+      $("next-hand").onclick = () => request(result.match_over ? "room/rematch" : "next", {ready:!room.ready});
+    } else $("next-hand").onclick = result.match_over ? showLobby : () => request("next", {});
+    return;
+  }
+  const myTurn = state.actor_id === viewerId();
+  if (!myTurn) {
+    const actor = state.players.find((p) => p.id === state.actor_id);
+    $("turn-title").textContent = `${actor?.name || "牌友"}${actor?.strategy === "human" ? "的回合" : " 正在思考"}`;
+    $("turn-hint").textContent = hero.folded ? "已弃牌。看看其他人的故事，或直接查看结果。" : hero.all_in ? "你已全下，接下来交给牌面。" : "留意对手的动作，轮到你时操作按钮会亮起。";
+    updateHTML(container, `<div class="waiting"><span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>${busy ? "正在推进牌局…" : "牌友行动中"}</span>${!multiplayer() && (hero.folded || hero.all_in) ? `<button id="finish-hand" class="outline" ${disabled ? "disabled" : ""}>快速看结果</button>` : ""}</div>`);
+    if (multiplayer()) $("turn-hint").textContent = hero.eliminated ? "你的筹码已用尽，可以继续观看朋友对战。" : hero.folded ? "本手已弃牌，等待其他牌友完成。" : "所有设备同步牌桌，请等待当前玩家操作。";
+    if ($("finish-hand")) $("finish-hand").onclick = () => request("finish", {}); return;
+  }
+  const legal = state.legal, canRaise = legal.min_raise_to !== null;
+  const bettingKey = actionScope();
+  if (raiseVersion !== bettingKey) { raiseTo = legal.min_raise_to || 0; raiseVersion = bettingKey; }
+  if (canRaise) raiseTo = Math.max(legal.min_raise_to, Math.min(legal.max_raise_to, raiseTo));
+  $("turn-title").textContent = "轮到你了";
+  $("turn-hint").textContent = legal.check ? "现在可以免费过牌，也可以主动下注。" : `跟注需要 ${fmt(legal.call_amount)} 筹码${legal.call_amount === hero.stack ? "，将投入全部剩余筹码" : ""}。不用着急，想好了再出手。`;
+  updateHTML(container, `<div class="action-buttons"><button id="fold" ${disabled || !legal.fold ? "disabled" : ""}>弃牌</button><button id="check-call" class="call" ${disabled ? "disabled" : ""}>${legal.check ? "过牌" : `跟注 ${fmt(legal.call_amount)}`}</button><button id="raise" class="primary" ${disabled || !canRaise ? "disabled" : ""}>${canRaise ? `加到 ${fmt(raiseTo)}` : "不可加注"}</button><button id="all-in" class="all-in" ${disabled || !legal.all_in ? "disabled" : ""}>全下</button></div>${canRaise ? `<div class="raise-controls"><label class="raise-slider"><span class="sr-only">本轮加注到</span><input id="raise-slider" type="range" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label><label class="raise-amount"><span class="sr-only">本轮加注总额</span><input id="raise-number" type="number" inputmode="numeric" min="${legal.min_raise_to}" max="${legal.max_raise_to}" value="${raiseTo}" step="1" ${disabled ? "disabled" : ""}></label></div><div class="quick-bets"><button data-bet="min" ${disabled ? "disabled" : ""}>最小</button>${BET_FRACTIONS.map(([ratio, label]) => `<button data-bet="${ratio}" ${disabled ? "disabled" : ""}>${label}</button>`).join("")}<span id="raise-caption" class="raise-caption">再投入 ${fmt(raiseTo - hero.bet)} 筹码</span></div>` : ""}`);
+  $("fold").onclick = () => request("action", {kind:"fold"});
+  $("check-call").onclick = () => legal.call_amount === hero.stack && !legal.check ? confirmAllIn() : request("action", {kind:legal.check ? "check" : "call"});
+  $("all-in").onclick = confirmAllIn;
+  $("raise").onclick = () => raiseTo === hero.bet + hero.stack ? confirmAllIn() : request("action", {kind:"raise", amount:raiseTo});
+  if (canRaise) {
+    $("raise-slider").oninput = (event) => setRaise(event.target.value);
+    $("raise-number").onchange = (event) => setRaise(event.target.value);
+    document.querySelectorAll("[data-bet]").forEach((button) => { button.onclick = () => {
+      const potAfterCall = state.pot + legal.call_amount;
+      setRaise(button.dataset.bet === "min" ? legal.min_raise_to : hero.bet + legal.call_amount + Math.round(potAfterCall * Number(button.dataset.bet)));
+    }; });
+  }
+}
+function payoutHTML(pot) {
+  const ownWinner = pot.awards.some(a => a.name === state?.players?.find(p => p.id === viewerId())?.name);
+  const eligibility = pot.eligibility_limits?.length
+    ? `${pot.eligibility_limits.map(p => `${esc(p.name)} 最多 ${fmt(p.amount)}`).join("、")}（不同下注层级合并结算）`
+    : pot.participants?.map(esc).join("、");
+  return `<div class="pot-explanation"><b>${esc(pot.label)}：${pot.awards.map(a => `${esc(a.name)} +${fmt(a.amount)}`).join("、")}</b>${eligibility ? `<small>可争夺：${eligibility}</small>` : ""}${pot.reason ? `<small class="${ownWinner ? "private-detail" : ""}">${esc(pot.reason)}</small>${ownWinner ? '<small class="privacy-cover">胜负比较已隐藏</small>' : ""}` : ""}</div>`;
+}
+function bestCardsHTML(hand) {
+  if (!hand.best_cards) return "";
+  const own = hand.player_id === viewerId();
+  return `<div class="best-five"><small>最佳五张</small><div class="best-five-cards ${own ? "private-cards" : ""}" ${own && privacy ? 'tabindex="0"' : ""} aria-label="${esc(hand.name)}的最佳五张牌">${own ? privateCards(hand.best_cards) : hand.best_cards.map(c => card(c)).join("")}</div></div>`;
+}
+function renderHistory() {
+  const key = JSON.stringify([scope(), viewerId(), privacy, state.history]);
+  if (key === historyRenderKey) return;
+  historyRenderKey = key;
+  const opened = new Set([...$("history").querySelectorAll("details[open]")].map(d => d.dataset.hand));
+  updateHTML($("history"), state.history.length ? state.history.map(h => `<details class="hand-replay" data-hand="${h.hand_number}" ${opened.has(String(h.hand_number)) ? "open" : ""}><summary>第 ${h.hand_number} 手 <b class="${profitClass(h.profit)}">${signed(h.profit)}</b></summary><p>${h.winners.map(esc).join("、")} 收下底池</p><div class="replay-board">${h.board.map(c => card(c)).join("")}</div>${h.details ? `${h.details.payouts.map(payoutHTML).join("")}${h.details.shown_hands.map(hand => `<p>${esc(hand.name)} · <span class="${hand.player_id === viewerId() ? "private-detail" : ""}">${esc(hand.comparison)}</span></p>${bestCardsHTML(hand)}`).join("")}<ol>${h.details.actions.map(a => `<li>${esc(a.street)} · ${esc(a.player)} ${esc(a.description)}</li>`).join("")}</ol>` : '<p class="muted">这手来自旧存档，仅保留摘要。</p>'}</details>`).join("") : '<p class="empty-note">完成一手后，可以在这里展开复盘。</p>');
+  const rows = state.history.filter(h => h.details?.stacks).slice().reverse();
+  const colors = ["#e8cb87", "#82c5a9", "#78a6dd", "#e48387", "#b78cea", "#78c4d1", "#f0a466", "#b9cd78"];
+  const series = new Map();
+  rows.forEach((h, x) => h.details.stacks.forEach(p => {
+    const id = `${p.id}:${p.name}`;
+    if (!series.has(id)) series.set(id, {name:p.name, points:[]});
+    series.get(id).points.push({x, y:p.stack});
+  }));
+  if (!rows.length) { $("chip-chart").innerHTML = '<p class="empty-note">完成一手后显示结算筹码曲线。</p>'; return; }
+  const max = Math.max(1, ...[...series.values()].flatMap(s => s.points.map(p => p.y)));
+  const x = n => 36 + n * 300 / Math.max(1, rows.length - 1), y = n => 158 - n * 130 / max;
+  const paths = [...series.values()].map((s, i) => `<polyline points="${s.points.map(p => `${x(p.x)},${y(p.y)}`).join(" ")}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="2"/>${s.points.map(p => `<circle cx="${x(p.x)}" cy="${y(p.y)}" r="2.5" fill="${colors[i % colors.length]}"><title>${esc(s.name)} · 第 ${rows[p.x].hand_number} 手：${fmt(p.y)}</title></circle>`).join("")}`).join("");
+  $("chip-chart").innerHTML = `<svg viewBox="0 0 355 185" role="img" aria-label="最近 ${rows.length} 手玩家结算筹码变化"><path d="M36 22V158H340" fill="none" stroke="#71868c"/><text x="3" y="30">${Math.round(max)}</text><text x="17" y="160">0</text><text x="36" y="179">第 ${rows[0].hand_number} 手</text><text x="275" y="179">第 ${rows.at(-1).hand_number} 手</text>${paths}</svg><div class="chart-legend">${[...series.values()].map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.name)} ${fmt(s.points.at(-1).y)}</span>`).join("")}</div><p class="muted">最近 30 手结算筹码。新人入桌会增加筹码，接替 AI 时原 AI 的筹码退出。</p>`;
+}
+function setRaise(value) {
+  raiseTo = Math.min(state.legal.max_raise_to, Math.max(state.legal.min_raise_to, Math.round(Number(value)) || state.legal.min_raise_to));
+  $("raise-slider").value = raiseTo; $("raise-number").value = raiseTo;
+  $("raise").textContent = `加到 ${fmt(raiseTo)}`;
+  $("raise-caption").textContent = `再投入 ${fmt(raiseTo - heroPlayer().bet)} 筹码`;
+}
+function confirmAllIn() {
+  pendingAllIn = {actionScope:actionScope()};
+  $("all-in-copy").textContent = `这会投入你剩下的 ${fmt(heroPlayer().stack)} 筹码。本手仍可能失利，确定就放手一搏。`;
+  openDialog("all-in-dialog");
+}
+
+function selectedRoom() { return document.querySelector('input[name="room"]:checked').value; }
+function populateOpponents() {
+  const room = ROOMS[selectedRoom()], count = Number($("player-count").value) - 1;
+  const catalog = state?.catalog || [];
+  $("opponent-picker").innerHTML = Array.from({length:count}, (_, i) => `<label>牌友 ${i + 1}<select data-opponent="${i}">${catalog.map((bot) => `<option value="${esc(bot.id)}" ${bot.id === room.bots[i] ? "selected" : ""}>${esc(bot.name)} · ${esc(bot.style)}</option>`).join("")}</select><small id="bot-description-${i}">${esc(catalog.find((b) => b.id === room.bots[i])?.description || "")}</small></label>`).join("");
+  document.querySelectorAll("[data-opponent]").forEach((select) => { select.onchange = () => {
+    $(`bot-description-${select.dataset.opponent}`).textContent = catalog.find((b) => b.id === select.value).description;
+  }; });
+}
+function showLobby() {
+  if (busy || !state) return;
+  if (multiplayer()) { notify("请先退出好友房，再开始单人游戏。"); return; }
+  const continuing = state && state.phase !== "lobby";
+  $("setup-note").textContent = continuing ? "重新开桌会结束当前牌局，所有人恢复 2,000 筹码。关闭此窗口可以继续原来的牌局。" : "无需注册。AI 只知道自己的底牌和桌上的公开信息。";
+  $("setup-error").hidden = true;
+  $("start-button").innerHTML = continuing ? '重新开桌 <span aria-hidden="true">→</span>' : '入座，开始玩 <span aria-hidden="true">→</span>';
+  populateOpponents();
+  if (!$("lobby").open) openDialog("lobby");
+}
+
+function renderRoom() {
+  const room = state?.room_info;
+  $("room-details").hidden = !room;
+  if (room && $("room-details").dataset.phase !== state.phase) {
+    $("room-details").open = ["waiting", "pending"].includes(state.phase);
+    $("room-details").dataset.phase = state.phase;
+  }
+  $("room-panel").hidden = !room;
+  document.querySelector(".game-layout").hidden = ["waiting", "pending"].includes(state?.phase);
+  $("room-button").hidden = !!room;
+  $("friends-button").textContent = room ? "房间信息" : "和朋友玩";
+  $("pace").closest("label").hidden = !!room;
+  $("table-exit-bar").hidden = !room || room.pending_approval;
+  $("join-requests").hidden = !room?.is_host || !room?.applications?.length;
+  $("requests-button").hidden = !room?.is_host || !room?.applications?.length;
+  $("requests-button").textContent = `入桌申请 ${room?.applications?.length || ""}`;
+  $("room-tools").hidden = !room || room.pending_approval;
+  if (!room) return;
+  $("away-button").textContent = room.away ? "回到牌桌" : "暂时离席";
+  $("away-button").disabled = busy || offline;
+  $("room-code").textContent = room.code;
+  if ($("invite-url").value !== room.join_url) $("invite-url").value = room.join_url;
+  $("waiting-room").hidden = state.phase !== "waiting";
+  $("members-panel").hidden = !!room.pending_approval;
+  document.querySelector(".invite-row").hidden = !!room.pending_approval;
+  $("leave-room").textContent = room.pending_approval ? "撤回申请" : "离开牌桌";
+  $("leave-room").disabled = busy;
+  if (room.pending_approval) {
+    $("heading").textContent = "等待房主同意";
+    $("hand-label").textContent = "申请已发送";
+    $("room-label").textContent = `房间 ${room.code}`;
+    $("room-status").textContent = `${room.applicant_name}，正在等待房主 ${room.host_name} 批准。批准后自动进入房间；已开局时从下一手参与。`;
+    return;
+  }
+  const actor = state.players?.find((player) => player.id === state.actor_id);
+  $("room-status").textContent = `房主：${room.host_name} · 每次思考 ${room.turn_seconds} 秒 · 随时可申请加入，由房主批准${actor?.strategy === "human" && !room.recovering ? ` · ${actor.name}还剩 ${room.remaining_seconds} 秒` : ""} · ${room.waiting_message || room.notice || "牌局进行中"}`;
+  $("leave-room").disabled = busy;
+  $("quick-leave-room").disabled = busy;
+  const betweenHands = state.phase === "waiting" || state.phase === "finished";
+  const readyText = `已准备 ${room.ready_count}/${room.ready_total}`;
+  $("ready-count").textContent = betweenHands ? readyText : "";
+  $("table-ready-note").textContent = betweenHands ? `${readyText} · ${room.waiting_message}` : room.recovering ? room.waiting_message : "随时可以主动离桌，不用等待行动计时结束。";
+  if ($("members-panel").dataset.phase !== state.phase) {
+    $("members-panel").open = state.phase === "waiting";
+    $("members-panel").dataset.phase = state.phase;
+  }
+  const members = room.members.map((member) => `<div class="room-member ${member.ready ? "member-ready" : ""}"><b>${esc(member.name)}${member.is_you ? " · 你" : ""}</b><span>${member.is_host ? "房主 · " : ""}${member.away ? "暂离 · 保留筹码" : member.online ? "在线" : "暂时离线"}${member.waiting_for_seat ? " · 下一手入座" : ""}</span>${betweenHands ? `<span class="member-status">${!member.needs_ready ? "观战中" : member.ready ? "✓ 已准备" : "尚未准备"}${!member.online && member.needs_ready ? " · 等待重连" : ""}</span>` : ""}${member.can_kick ? `<button class="kick-button" data-kick="${esc(member.id)}" ${busy ? "disabled" : ""}>移出房间</button>` : ""}</div>`);
+  updateHTML($("join-request-list"), (room.applications || []).map((applicant) => `<div class="join-request"><div><b>${esc(applicant.name)}</b><small>${applicant.online ? "等待入桌" : "申请者暂时离线"}${!applicant.can_approve ? " · 座位已满，请先移出一位玩家" : ""}</small></div><div class="request-buttons"><button class="primary" data-approve="${esc(applicant.id)}" ${busy || offline || !applicant.can_approve ? "disabled" : ""}>同意</button><button class="outline" data-reject="${esc(applicant.id)}" ${busy || offline ? "disabled" : ""}>拒绝</button></div></div>`).join(""));
+  document.querySelectorAll("[data-approve]").forEach((button) => { button.onclick = () => request("room/approve", {target_id:button.dataset.approve}); });
+  document.querySelectorAll("[data-reject]").forEach((button) => { button.onclick = () => request("room/reject", {target_id:button.dataset.reject}); });
+  if (state.phase === "waiting") {
+    $("heading").textContent = "朋友的牌桌"; $("hand-label").textContent = "等候开局";
+    $("room-label").textContent = `房间 ${room.code}`;
+    for (let i = room.members.length; i < room.capacity; i++) members.push(`<div class="room-member empty"><b>空座位</b><span>${room.fill_bots ? `开局由${esc(room.bot_style)} AI 补位` : "等待朋友加入"}</span></div>`);
+    $("waiting-note").textContent = `${room.members.length} 位朋友已入座 · 最多 ${room.capacity} 人${room.fill_bots ? " · 空位由 AI 补齐" : " · 至少两人即可开局"}。${room.waiting_message}。`;
+    $("start-room").disabled = busy || offline || !room.can_start;
+    $("start-room").textContent = room.ready ? "取消准备" : "我准备好了";
+  }
+  updateHTML($("room-members"), members.join(""));
+  document.querySelectorAll("[data-kick]").forEach((button) => { button.onclick = () => {
+    const member = room.members.find((item) => item.id === button.dataset.kick);
+    if (!member) return;
+    pendingKick = {id:member.id, room:room.code};
+    $("kick-copy").textContent = `确认将 ${member.name} 移出房间？开局后该座位由 AI 接替。其他人的准备状态会保留，剩余玩家全部准备好后会自动继续。`;
+    openDialog("kick-dialog");
+  }; });
+}
+
+function showRankings() {
+  hidePrivateCards();
+  const currentType = privacy ? "" : state?.hand_type;
+  const ranks = [
+    ["同花顺", "As Ks Qs Js Ts", "同花色，五张连续点数"],
+    ["四条", "9s 9h 9d 9c As", "四张相同点数"],
+    ["葫芦", "Ks Kh Kd 6c 6s", "三条加一对"],
+    ["同花", "Ah Jh 8h 5h 2h", "五张相同花色"],
+    ["顺子", "9s 8h 7d 6c 5s", "五张连续点数"],
+    ["三条", "Qs Qh Qd 9c 4s", "三张相同点数"],
+    ["两对", "Js Jh 4d 4c As", "两组对子"],
+    ["一对", "As Ah Kd 8c 3s", "一组对子"],
+    ["高牌", "As Jh 8d 5c 2s", "没有以上组合，依次比点数"],
+  ];
+  $("rankings-list").innerHTML = ranks.map(([name,cards,note], i) => `<div class="ranking-row ${currentType === name ? "current-ranking" : ""}"><div><b>${i + 1}. ${name}${currentType === name ? " · 当前" : ""}</b><p>${note}</p></div><div class="ranking-cards">${cards.split(" ").map((code) => card(code)).join("")}</div></div>`).join("");
+  openDialog("rankings-dialog");
+}
+
+function showNetwork() {
+  if (busy || !state) return;
+  if (multiplayer()) { $("room-details").open = true; $("room-panel").scrollIntoView({behavior:"smooth", block:"start"}); return; }
+  if ($("lobby").open) $("lobby").close();
+  $("network-error").hidden = true;
+  $("friend-name").value = prefs.get("name", "");
+  $("join-code").value = new URLSearchParams(location.search).get("room") || "";
+  updateHTML($("recent-rooms"), recentRooms().map(r => `<button type="button" class="outline" data-recent-room="${esc(r.code)}">${esc(r.code)}</button>`).join(""));
+  document.querySelectorAll("[data-recent-room]").forEach(button => { button.onclick = () => { $("join-code").value = button.dataset.recentRoom; $("join-code").focus(); }; });
+  $("network-hint").textContent = state.network?.enabled ? "创建房间后，把邀请链接发给同一 Wi-Fi 下的朋友。每台设备用各自的浏览器加入。" : "当前只有本机可访问。要邀请其他设备，请用局域网模式启动游戏：./start_game.sh --lan";
+  $("room-bot").innerHTML = state.catalog.map((bot) => `<option value="${esc(bot.id)}" ${bot.id === "calling_station" ? "selected" : ""}>${esc(bot.name)} · ${esc(bot.style)}</option>`).join("");
+  if (!$("network-dialog").open) openDialog("network-dialog");
+}
+
+async function enterRoom(create) {
+  if (!$("friend-name").reportValidity()) return;
+  const name = $("friend-name").value.trim();
+  $("network-error").hidden = true;
+  const payload = create ? {name, capacity:Number($("room-capacity").value), turn_seconds:Number($("room-turn-seconds").value), fill_bots:$("fill-bots").checked, bot_strategy:$("room-bot").value} : {name, code:$("join-code").value.trim().toUpperCase()};
+  if (await request(create ? "room/create" : "room/join", payload)) {
+    departureSeen = null;
+    prefs.set("name", name);
+    history.replaceState(null, "", `/?room=${encodeURIComponent(state.room_info.code)}`);
+    closeDialog("network-dialog");
+    $("room-panel").scrollIntoView({block:"start"});
+  }
+}
+
+async function copyField(id, label) {
+  const input = $(id);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Manual copy needed");
+    await navigator.clipboard.writeText(input.value);
+    notify(`${label}已复制。`);
+  } catch {
+    input.focus(); input.select(); input.setSelectionRange(0, input.value.length);
+    try { if (document.execCommand("copy")) { notify(`${label}已复制。`); return; } } catch { /* Select for touch copy. */ }
+    notify(`${label}已选中，长按或按 Ctrl+C 复制。`);
+  }
+}
+
+$("player-name").value = prefs.get("name", "");
+$("pace").value = ["1200","800","300"].includes(prefs.get("pace", "800")) ? prefs.get("pace", "800") : "800";
+$("room-button").onclick = showLobby;
+$("close-lobby").onclick = () => closeDialog("lobby");
+$("help-button").onclick = () => openDialog("help");
+$("rankings-button").onclick = showRankings;
+$("requests-button").onclick = () => { $("room-details").open = true; $("join-requests").scrollIntoView({behavior:"smooth", block:"center"}); };
+$("away-button").onclick = () => state.room_info.away ? request("room/away", {away:false}) : openDialog("away-dialog");
+$("confirm-away").onclick = async () => { if (await request("room/away", {away:true})) closeDialog("away-dialog"); };
+$("qr-button").onclick = () => { $("qr-error").hidden = true; $("invite-qr").src = `/api/invite-qr?room=${encodeURIComponent(scope())}`; openDialog("qr-dialog"); };
+$("invite-qr").onerror = () => { $("qr-error").hidden = false; };
+$("recovery-button").onclick = () => { $("recovery-code").value = state.room_info.recovery_code; openDialog("recovery-dialog"); };
+$("copy-recovery").onclick = () => copyField("recovery-code", "座位恢复码");
+$("recover-seat").onclick = async () => {
+  if (await request("room/recover", {code:$("join-code").value.trim(), recovery_code:$("recover-input").value.trim()})) {
+    $("recover-input").value = ""; departureSeen = null; closeDialog("network-dialog");
+    history.replaceState(null, "", `/?room=${encodeURIComponent(scope())}`);
+    notify("已找回原座位，旧浏览器已退出。请保存新的恢复码。");
+  }
+};
+$("hand-strength").onclick = showRankings;
+$("friends-button").onclick = showNetwork;
+$("lobby-friends").onclick = showNetwork;
+$("create-room").onclick = () => enterRoom(true);
+$("join-room").onclick = () => enterRoom(false);
+$("join-code").addEventListener("keydown", (event) => { if (event.key === "Enter") enterRoom(false); });
+$("fill-bots").onchange = () => { $("room-bot-label").hidden = !$("fill-bots").checked; };
+$("start-room").onclick = () => request("room/start", {ready:!state.room_info.ready});
+$("copy-invite").onclick = () => copyField("invite-url", "邀请链接");
+$("leave-room").onclick = () => state.room_info?.pending_approval ? request("room/leave", {}) : openDialog("leave-room-dialog");
+$("quick-leave-room").onclick = () => openDialog("leave-room-dialog");
+$("confirm-leave-room").onclick = async () => { if (await request("room/leave", {})) closeDialog("leave-room-dialog"); };
+$("confirm-kick").onclick = async () => {
+  if (!pendingKick || scope() !== pendingKick.room || !state.room_info?.is_host) { closeDialog("kick-dialog"); notify("房间已更新，请重新选择要移出的玩家。"); return; }
+  if (await request("room/kick", {target_id:pendingKick.id})) closeDialog("kick-dialog");
+};
+$("retry-button").onclick = () => request();
+$("pace").onchange = () => { prefs.set("pace", $("pace").value); scheduleBot(); };
+$("sound-button").onclick = () => { sound = !sound; prefs.set("sound", sound ? "on" : "off"); playSound(); render(); };
+$("privacy-button").onclick = () => {
+  hidePrivateCards();
+  privacy = !privacy; prefs.set("privacy", privacy ? "on" : "off");
+  render();
+};
+$("player-count").onchange = populateOpponents;
+document.querySelectorAll('input[name="room"]').forEach((input) => { input.onchange = populateOpponents; });
+document.querySelectorAll("[data-close]").forEach((button) => { button.onclick = () => closeDialog(button.dataset.close); });
+document.querySelectorAll("dialog").forEach((dialog) => { dialog.addEventListener("close", scheduleBot); });
+$("recovery-dialog").addEventListener("close", () => { $("recovery-code").value = ""; });
+$("lobby").addEventListener("cancel", (event) => { if (!state || state.phase === "lobby" || busy) event.preventDefault(); });
+$("confirm-all-in").onclick = () => {
+  closeDialog("all-in-dialog");
+  if (!pendingAllIn || actionScope() !== pendingAllIn.actionScope) { notify("牌桌已经更新，请重新确认当前动作。"); return; }
+  request("action", {kind:"all_in"});
+};
+$("setup-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const name = $("player-name").value.trim() || "你";
+  const opponents = [...document.querySelectorAll("[data-opponent]")].map((select) => select.value);
+  const preset = ROOMS[selectedRoom()];
+  const customized = opponents.some((bot, i) => bot !== preset.bots[i]);
+  if (await request("new", {name, opponents, room:customized ? "自由组桌" : preset.name})) {
+    prefs.set("name", name); closeDialog("lobby");
+    $("turn-title").focus({preventScroll:true});
+  }
+};
+document.addEventListener("visibilitychange", () => {
+  hidePrivateCards();
+  clearTimeout(botTimer);
+  if (multiplayer()) { if (!document.hidden) pollRoom(); }
+  else if (!document.hidden && !busy && !hasModal()) request();
+});
+
+// Actual movement avoids reopening cards when polling replaces DOM under a still cursor.
+// Reveal only while hovering or holding; never latch open after a click or tap.
+document.addEventListener("pointermove", (event) => {
+  const target = event.target.closest(".private-cards");
+  if (event.pointerType === "mouse") {
+    if (target) peekCards(target);
+    else if (peekPointer === null) hidePrivateCards();
+  } else if (peekTarget && event.pointerId === peekPointer) {
+    const rect = peekTarget.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) hidePrivateCards();
+  }
+});
+document.addEventListener("pointerout", (event) => {
+  if (peekTarget && !peekTarget.contains(event.relatedTarget)) hidePrivateCards();
+});
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target.closest(".private-cards");
+  if (!privacy || !target || event.pointerType === "mouse" || !event.isPrimary) return;
+  event.preventDefault();
+  peekCards(target, event.pointerId);
+  target.setPointerCapture(event.pointerId);
+});
+for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) {
+  document.addEventListener(name, (event) => { if (event.pointerId === peekPointer) hidePrivateCards(); });
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hidePrivateCards();
+  const target = event.target.closest(".private-cards");
+  if (privacy && target && [" ", "Enter"].includes(event.key)) {
+    event.preventDefault();
+    if (!event.repeat) peekCards(target);
+  }
+});
+document.addEventListener("keyup", (event) => { if ([" ", "Enter"].includes(event.key)) hidePrivateCards(); });
+document.addEventListener("focusout", (event) => { if (peekTarget?.contains(event.target)) hidePrivateCards(); });
+document.addEventListener("scroll", hidePrivateCards, true);
+document.addEventListener("contextmenu", (event) => {
+  if (privacy && event.target.closest(".private-cards")) { event.preventDefault(); hidePrivateCards(); }
+});
+window.addEventListener("blur", hidePrivateCards);
+window.addEventListener("pagehide", hidePrivateCards);
+function sizeActionDock() {
+  const dock = document.querySelector(".action-dock");
+  document.documentElement.style.setProperty("--dock-height", `${dock.getBoundingClientRect().height}px`);
+}
+if (window.ResizeObserver) new ResizeObserver(sizeActionDock).observe(document.querySelector(".action-dock"));
+sizeActionDock();
+window.addEventListener("resize", sizeActionDock);
+window.visualViewport?.addEventListener("resize", () => {
+  const keyboard = window.innerHeight - window.visualViewport.height > 130;
+  document.body.classList.toggle("keyboard-open", keyboard);
+});
+
+// Optional page tools use the exact public view shown to the player.
+if (document.modelContext?.registerTool) {
+  const lifecycle = new AbortController();
+  const register = (tool) => {
+    try { Promise.resolve(document.modelContext.registerTool(tool, {signal:lifecycle.signal})).catch(() => {}); }
+    catch { /* Unsupported implementations must not affect gameplay. */ }
+  };
+  const emptyInput = {type:"object", properties:{}, additionalProperties:false};
+  const validateEmpty = (input) => {
+    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new Error("This tool accepts an empty object.");
+  };
+  register({name:"read_poker_table", title:"查看当前牌桌", description:"Read the player's visible poker table, legal actions and result. Opponent cards are included only when officially shown. Does not advance the game.", inputSchema:emptyInput, annotations:{readOnlyHint:true,untrustedContentHint:true}, execute(input) {
+    validateEmpty(input);
+    if (!state) return {phase:"loading"};
+    const {phase,viewer_id,hand_number,street_name,actor_id,players,board,pot,legal,result} = state;
+    return JSON.parse(JSON.stringify({phase,viewer_id,hand_number,street_name,actor_id,players,board,pot,legal,result}));
+  }});
+  register({name:"open_poker_setup", title:"打开单人选桌窗口", description:"Open the solo table setup dialog and pause solo AI turns. Does not create a table or end a game. Unavailable while the player belongs to a shared multiplayer room.", inputSchema:emptyInput, annotations:{readOnlyHint:false,untrustedContentHint:false}, execute(input) {
+    validateEmpty(input);
+    if (busy || !state) throw new Error("Please wait for the current request to complete.");
+    if (multiplayer()) throw new Error("The player must leave the shared room before opening solo setup.");
+    showLobby(); return {setup_open:$("lobby").open};
+  }});
+  window.addEventListener("pagehide", (event) => { if (!event.persisted) lifecycle.abort(); });
+}
+render();
+setInterval(renderCountdown, 250);
+request();
