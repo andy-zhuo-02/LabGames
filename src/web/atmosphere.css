@@ -1,0 +1,201 @@
+/* Walnut, aged brass and oxblood leather; gem colors remain independent. */
+:root {
+  color: #f3e8d4;
+  background: #241710;
+  --bg: #241710;
+  --panel: #34241c;
+  --panel-light: #49352a;
+  --border: #c7a56b38;
+  --muted: #c5b59d;
+}
+.app-shell {
+  isolation: isolate;
+  background: transparent;
+}
+.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(#1c100c38, #1c100c70),
+    url('/art/backgrounds/merchant-table.png') center / cover no-repeat,
+    #35231a;
+}
+.site-header,
+.site-footer {
+  background: #21150fe8;
+  border-color: #c7a56b55;
+  box-shadow: 0 2px 18px #120b0740;
+}
+.brand,
+.welcome h1,
+.section-heading h1,
+.turn-indicator h1,
+.subheading h2,
+.dialog h2 {
+  font-family: 'Noto Serif SC', 'Songti SC', SimSun, serif;
+}
+.brand-mark {
+  border-color: #c9a56a80;
+  background: linear-gradient(145deg, #69503955, #23150d88);
+  box-shadow:
+    inset 0 0 0 3px #22160f,
+    inset 0 0 0 4px #c9a56a30;
+}
+.welcome {
+  text-shadow: 0 2px 10px #140b05;
+}
+.welcome h1 {
+  color: #f8ebce;
+}
+.welcome-copy,
+.game-meta,
+.welcome-rule > div,
+.welcome-rule small {
+  color: #ded0b9;
+}
+.entry-panel,
+.room-panel,
+.seat-card,
+.player-panel,
+.history {
+  background: linear-gradient(135deg, #453027f5, #281b16f5);
+  border: 1px solid #c6a36a66;
+  box-shadow:
+    0 10px 24px #10090435,
+    inset 0 0 0 3px #180e0840;
+}
+.entry-panel,
+.room-panel {
+  border-top: 3px solid #bfa06a;
+}
+.seat-card.empty {
+  background: #271b15d9;
+  border-style: dashed;
+}
+.player-panel.current {
+  background: linear-gradient(135deg, #58422bf5, #342219f5);
+  border-color: #e2bf78;
+  box-shadow:
+    inset 3px 0 #e2bf78,
+    0 4px 15px #130b0540;
+}
+.game-topline {
+  padding: 15px 18px;
+  background: #291b15ed;
+  border: 1px solid #c6a36a55;
+  border-radius: 8px;
+}
+.table-surface {
+  padding: 20px;
+  border: 1px solid #c6a36a80;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse at 50% 0, #72463525, transparent 65%),
+    linear-gradient(125deg, #35211fef, #271b18f5);
+  box-shadow:
+    inset 0 0 0 4px #1e120d80,
+    inset 0 0 0 5px #c6a36a25,
+    0 12px 36px #160b084d;
+}
+.bank-section,
+.your-table {
+  background: linear-gradient(120deg, #59402c70, #1f140e80);
+  border-color: #c6a36a50;
+  box-shadow: inset 0 1px #e4c89412;
+}
+.history {
+  padding: 15px;
+  border-radius: 9px;
+}
+.subheading h2,
+.history li.latest,
+.token-name,
+.text-button,
+.button.subtle {
+  color: #ecddc3;
+}
+.subheading > span,
+.history li,
+.round-badge > span,
+.entry-note,
+.seat-position,
+.seat-card.empty h3,
+.player-name > span,
+.player-score > small,
+.player-foot,
+.mini-labels,
+.deck-count,
+.take-modes button,
+.segmented button {
+  color: #c5b59d;
+}
+.deck {
+  background: linear-gradient(145deg, #694334, #35231d);
+  border-color: #b7986355;
+}
+.noble-card {
+  background: linear-gradient(115deg, #f1e4c6, #d6c39c);
+  box-shadow:
+    inset 0 0 0 3px #81693f20,
+    0 3px 6px #10090445;
+}
+.segmented,
+input,
+select,
+.stepper {
+  background: #1e140fe6;
+  border-color: #c7a56b50;
+}
+input::placeholder {
+  color: #a5947c;
+}
+.segmented button.active,
+.take-modes button.active {
+  background: #654b30;
+  border-color: #c7a56b66;
+  color: #ffebbd;
+}
+.button.primary {
+  background: linear-gradient(#ebd095, #cfac69);
+  color: #34200f;
+  border-color: #f4dba3;
+  box-shadow:
+    inset 0 1px #fff4d655,
+    0 2px 5px #140b0830;
+}
+.button.primary:hover:not(:disabled) {
+  background: #f0d79f;
+}
+.dialog {
+  background: linear-gradient(140deg, #423026, #271b16);
+  color: #f3e8d4;
+  border-color: #c7a56b99;
+}
+.dialog::backdrop {
+  background: #130b08c4;
+}
+.history ol {
+  scrollbar-color: #94734b transparent;
+}
+.log-dot {
+  background: #957956;
+}
+@media (max-width: 640px) {
+  .app-shell::before {
+    background-position:
+      center,
+      48% center;
+  }
+  .table-surface {
+    padding: 12px 8px;
+  }
+  .game-topline {
+    padding: 12px 10px;
+  }
+  .market-section {
+    scrollbar-color: #b79b61 #35231d;
+  }
+}

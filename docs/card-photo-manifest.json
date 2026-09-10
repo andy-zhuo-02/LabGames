@@ -1,0 +1,1027 @@
+[
+  {
+    "id": "white-L1-01",
+    "image": "cards/white-L1-01.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 3
+    }
+  },
+  {
+    "id": "white-L1-02",
+    "image": "cards/white-L1-02.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 1,
+    "cost": {
+      "green": 4
+    }
+  },
+  {
+    "id": "white-L1-03",
+    "image": "cards/white-L1-03.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "red": 2,
+      "black": 1
+    }
+  },
+  {
+    "id": "white-L1-04",
+    "image": "cards/white-L1-04.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 2,
+      "black": 2
+    }
+  },
+  {
+    "id": "white-L1-05",
+    "image": "cards/white-L1-05.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "white": 3,
+      "blue": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "white-L1-06",
+    "image": "cards/white-L1-06.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 2,
+      "green": 2,
+      "black": 1
+    }
+  },
+  {
+    "id": "white-L1-07",
+    "image": "cards/white-L1-07.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 1,
+      "green": 1,
+      "red": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "white-L1-08",
+    "image": "cards/white-L1-08.png",
+    "level": 1,
+    "bonus": "white",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 1,
+      "green": 2,
+      "red": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "white-L2-01",
+    "image": "cards/white-L2-01.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 2,
+    "cost": {
+      "red": 5
+    }
+  },
+  {
+    "id": "white-L2-02",
+    "image": "cards/white-L2-02.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 3,
+    "cost": {
+      "white": 6
+    }
+  },
+  {
+    "id": "white-L2-03",
+    "image": "cards/white-L2-03.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 2,
+    "cost": {
+      "red": 5,
+      "black": 3
+    }
+  },
+  {
+    "id": "white-L2-04",
+    "image": "cards/white-L2-04.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 2,
+    "cost": {
+      "green": 1,
+      "red": 4,
+      "black": 2
+    }
+  },
+  {
+    "id": "white-L2-05",
+    "image": "cards/white-L2-05.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 1,
+    "cost": {
+      "green": 3,
+      "red": 2,
+      "black": 2
+    }
+  },
+  {
+    "id": "white-L2-06",
+    "image": "cards/white-L2-06.png",
+    "level": 2,
+    "bonus": "white",
+    "prestige_points": 1,
+    "cost": {
+      "white": 2,
+      "blue": 3,
+      "red": 3
+    }
+  },
+  {
+    "id": "white-L3-01",
+    "image": "cards/white-L3-01.png",
+    "level": 3,
+    "bonus": "white",
+    "prestige_points": 4,
+    "cost": {
+      "black": 7
+    }
+  },
+  {
+    "id": "white-L3-02",
+    "image": "cards/white-L3-02.png",
+    "level": 3,
+    "bonus": "white",
+    "prestige_points": 4,
+    "cost": {
+      "white": 3,
+      "red": 3,
+      "black": 6
+    }
+  },
+  {
+    "id": "white-L3-03",
+    "image": "cards/white-L3-03.png",
+    "level": 3,
+    "bonus": "white",
+    "prestige_points": 3,
+    "cost": {
+      "blue": 3,
+      "green": 3,
+      "red": 5,
+      "black": 3
+    }
+  },
+  {
+    "id": "white-L3-04",
+    "image": "cards/white-L3-04.png",
+    "level": 3,
+    "bonus": "white",
+    "prestige_points": 5,
+    "cost": {
+      "white": 3,
+      "black": 7
+    }
+  },
+  {
+    "id": "blue-L1-01",
+    "image": "cards/blue-L1-01.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "black": 3
+    }
+  },
+  {
+    "id": "blue-L1-02",
+    "image": "cards/blue-L1-02.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 1,
+    "cost": {
+      "red": 4
+    }
+  },
+  {
+    "id": "blue-L1-03",
+    "image": "cards/blue-L1-03.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "black": 2
+    }
+  },
+  {
+    "id": "blue-L1-04",
+    "image": "cards/blue-L1-04.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "green": 2,
+      "black": 2
+    }
+  },
+  {
+    "id": "blue-L1-05",
+    "image": "cards/blue-L1-05.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 1,
+      "green": 3,
+      "red": 1
+    }
+  },
+  {
+    "id": "blue-L1-06",
+    "image": "cards/blue-L1-06.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "green": 2,
+      "red": 2
+    }
+  },
+  {
+    "id": "blue-L1-07",
+    "image": "cards/blue-L1-07.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "green": 1,
+      "red": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "blue-L1-08",
+    "image": "cards/blue-L1-08.png",
+    "level": 1,
+    "bonus": "blue",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "green": 1,
+      "red": 2,
+      "black": 1
+    }
+  },
+  {
+    "id": "blue-L2-01",
+    "image": "cards/blue-L2-01.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 2,
+    "cost": {
+      "blue": 5
+    }
+  },
+  {
+    "id": "blue-L2-02",
+    "image": "cards/blue-L2-02.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 3,
+    "cost": {
+      "blue": 6
+    }
+  },
+  {
+    "id": "blue-L2-03",
+    "image": "cards/blue-L2-03.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 2,
+    "cost": {
+      "white": 5,
+      "blue": 3
+    }
+  },
+  {
+    "id": "blue-L2-04",
+    "image": "cards/blue-L2-04.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 2,
+    "cost": {
+      "white": 2,
+      "red": 1,
+      "black": 4
+    }
+  },
+  {
+    "id": "blue-L2-05",
+    "image": "cards/blue-L2-05.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 1,
+    "cost": {
+      "blue": 2,
+      "green": 2,
+      "red": 3
+    }
+  },
+  {
+    "id": "blue-L2-06",
+    "image": "cards/blue-L2-06.png",
+    "level": 2,
+    "bonus": "blue",
+    "prestige_points": 1,
+    "cost": {
+      "blue": 2,
+      "green": 3,
+      "black": 3
+    }
+  },
+  {
+    "id": "blue-L3-01",
+    "image": "cards/blue-L3-01.png",
+    "level": 3,
+    "bonus": "blue",
+    "prestige_points": 4,
+    "cost": {
+      "white": 7
+    }
+  },
+  {
+    "id": "blue-L3-02",
+    "image": "cards/blue-L3-02.png",
+    "level": 3,
+    "bonus": "blue",
+    "prestige_points": 4,
+    "cost": {
+      "white": 6,
+      "blue": 3,
+      "black": 3
+    }
+  },
+  {
+    "id": "blue-L3-03",
+    "image": "cards/blue-L3-03.png",
+    "level": 3,
+    "bonus": "blue",
+    "prestige_points": 3,
+    "cost": {
+      "white": 3,
+      "green": 3,
+      "red": 3,
+      "black": 5
+    }
+  },
+  {
+    "id": "blue-L3-04",
+    "image": "cards/blue-L3-04.png",
+    "level": 3,
+    "bonus": "blue",
+    "prestige_points": 5,
+    "cost": {
+      "white": 7,
+      "blue": 3
+    }
+  },
+  {
+    "id": "green-L1-01",
+    "image": "cards/green-L1-01.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "red": 3
+    }
+  },
+  {
+    "id": "green-L1-02",
+    "image": "cards/green-L1-02.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 1,
+    "cost": {
+      "black": 4
+    }
+  },
+  {
+    "id": "green-L1-03",
+    "image": "cards/green-L1-03.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "blue": 1
+    }
+  },
+  {
+    "id": "green-L1-04",
+    "image": "cards/green-L1-04.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 2,
+      "red": 2
+    }
+  },
+  {
+    "id": "green-L1-05",
+    "image": "cards/green-L1-05.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 3,
+      "green": 1
+    }
+  },
+  {
+    "id": "green-L1-06",
+    "image": "cards/green-L1-06.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 1,
+      "red": 2,
+      "black": 2
+    }
+  },
+  {
+    "id": "green-L1-07",
+    "image": "cards/green-L1-07.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "red": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "green-L1-08",
+    "image": "cards/green-L1-08.png",
+    "level": 1,
+    "bonus": "green",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "red": 1,
+      "black": 2
+    }
+  },
+  {
+    "id": "green-L2-01",
+    "image": "cards/green-L2-01.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 2,
+    "cost": {
+      "green": 5
+    }
+  },
+  {
+    "id": "green-L2-02",
+    "image": "cards/green-L2-02.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 3,
+    "cost": {
+      "green": 6
+    }
+  },
+  {
+    "id": "green-L2-03",
+    "image": "cards/green-L2-03.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 2,
+    "cost": {
+      "blue": 5,
+      "green": 3
+    }
+  },
+  {
+    "id": "green-L2-04",
+    "image": "cards/green-L2-04.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 2,
+    "cost": {
+      "white": 4,
+      "blue": 2,
+      "black": 1
+    }
+  },
+  {
+    "id": "green-L2-05",
+    "image": "cards/green-L2-05.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 1,
+    "cost": {
+      "white": 2,
+      "blue": 3,
+      "black": 2
+    }
+  },
+  {
+    "id": "green-L2-06",
+    "image": "cards/green-L2-06.png",
+    "level": 2,
+    "bonus": "green",
+    "prestige_points": 1,
+    "cost": {
+      "white": 3,
+      "green": 2,
+      "red": 3
+    }
+  },
+  {
+    "id": "green-L3-01",
+    "image": "cards/green-L3-01.png",
+    "level": 3,
+    "bonus": "green",
+    "prestige_points": 4,
+    "cost": {
+      "blue": 7
+    }
+  },
+  {
+    "id": "green-L3-02",
+    "image": "cards/green-L3-02.png",
+    "level": 3,
+    "bonus": "green",
+    "prestige_points": 4,
+    "cost": {
+      "white": 3,
+      "blue": 6,
+      "green": 3
+    }
+  },
+  {
+    "id": "green-L3-03",
+    "image": "cards/green-L3-03.png",
+    "level": 3,
+    "bonus": "green",
+    "prestige_points": 3,
+    "cost": {
+      "white": 5,
+      "blue": 3,
+      "red": 3,
+      "black": 3
+    }
+  },
+  {
+    "id": "green-L3-04",
+    "image": "cards/green-L3-04.png",
+    "level": 3,
+    "bonus": "green",
+    "prestige_points": 5,
+    "cost": {
+      "blue": 7,
+      "green": 3
+    }
+  },
+  {
+    "id": "red-L1-01",
+    "image": "cards/red-L1-01.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 3
+    }
+  },
+  {
+    "id": "red-L1-02",
+    "image": "cards/red-L1-02.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 1,
+    "cost": {
+      "white": 4
+    }
+  },
+  {
+    "id": "red-L1-03",
+    "image": "cards/red-L1-03.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "blue": 2,
+      "green": 1
+    }
+  },
+  {
+    "id": "red-L1-04",
+    "image": "cards/red-L1-04.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "red": 2
+    }
+  },
+  {
+    "id": "red-L1-05",
+    "image": "cards/red-L1-05.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "red": 1,
+      "black": 3
+    }
+  },
+  {
+    "id": "red-L1-06",
+    "image": "cards/red-L1-06.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "green": 1,
+      "black": 2
+    }
+  },
+  {
+    "id": "red-L1-07",
+    "image": "cards/red-L1-07.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "green": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "red-L1-08",
+    "image": "cards/red-L1-08.png",
+    "level": 1,
+    "bonus": "red",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "blue": 1,
+      "green": 1,
+      "black": 1
+    }
+  },
+  {
+    "id": "red-L2-01",
+    "image": "cards/red-L2-01.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 2,
+    "cost": {
+      "black": 5
+    }
+  },
+  {
+    "id": "red-L2-02",
+    "image": "cards/red-L2-02.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 3,
+    "cost": {
+      "red": 6
+    }
+  },
+  {
+    "id": "red-L2-03",
+    "image": "cards/red-L2-03.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 2,
+    "cost": {
+      "white": 3,
+      "black": 5
+    }
+  },
+  {
+    "id": "red-L2-04",
+    "image": "cards/red-L2-04.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 2,
+    "cost": {
+      "white": 1,
+      "blue": 4,
+      "green": 2
+    }
+  },
+  {
+    "id": "red-L2-05",
+    "image": "cards/red-L2-05.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 1,
+    "cost": {
+      "white": 2,
+      "red": 2,
+      "black": 3
+    }
+  },
+  {
+    "id": "red-L2-06",
+    "image": "cards/red-L2-06.png",
+    "level": 2,
+    "bonus": "red",
+    "prestige_points": 1,
+    "cost": {
+      "blue": 3,
+      "red": 2,
+      "black": 3
+    }
+  },
+  {
+    "id": "red-L3-01",
+    "image": "cards/red-L3-01.png",
+    "level": 3,
+    "bonus": "red",
+    "prestige_points": 4,
+    "cost": {
+      "green": 7
+    }
+  },
+  {
+    "id": "red-L3-02",
+    "image": "cards/red-L3-02.png",
+    "level": 3,
+    "bonus": "red",
+    "prestige_points": 4,
+    "cost": {
+      "blue": 3,
+      "green": 6,
+      "red": 3
+    }
+  },
+  {
+    "id": "red-L3-03",
+    "image": "cards/red-L3-03.png",
+    "level": 3,
+    "bonus": "red",
+    "prestige_points": 3,
+    "cost": {
+      "white": 3,
+      "blue": 5,
+      "green": 3,
+      "black": 3
+    }
+  },
+  {
+    "id": "red-L3-04",
+    "image": "cards/red-L3-04.png",
+    "level": 3,
+    "bonus": "red",
+    "prestige_points": 5,
+    "cost": {
+      "green": 7,
+      "red": 3
+    }
+  },
+  {
+    "id": "black-L1-01",
+    "image": "cards/black-L1-01.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "green": 3
+    }
+  },
+  {
+    "id": "black-L1-02",
+    "image": "cards/black-L1-02.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 1,
+    "cost": {
+      "blue": 4
+    }
+  },
+  {
+    "id": "black-L1-03",
+    "image": "cards/black-L1-03.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "green": 2,
+      "red": 1
+    }
+  },
+  {
+    "id": "black-L1-04",
+    "image": "cards/black-L1-04.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "green": 2
+    }
+  },
+  {
+    "id": "black-L1-05",
+    "image": "cards/black-L1-05.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "green": 1,
+      "red": 3,
+      "black": 1
+    }
+  },
+  {
+    "id": "black-L1-06",
+    "image": "cards/black-L1-06.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "white": 2,
+      "blue": 2,
+      "red": 1
+    }
+  },
+  {
+    "id": "black-L1-07",
+    "image": "cards/black-L1-07.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "green": 1,
+      "red": 1
+    }
+  },
+  {
+    "id": "black-L1-08",
+    "image": "cards/black-L1-08.png",
+    "level": 1,
+    "bonus": "black",
+    "prestige_points": 0,
+    "cost": {
+      "white": 1,
+      "blue": 2,
+      "green": 1,
+      "red": 1
+    }
+  },
+  {
+    "id": "black-L2-01",
+    "image": "cards/black-L2-01.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 2,
+    "cost": {
+      "white": 5
+    }
+  },
+  {
+    "id": "black-L2-02",
+    "image": "cards/black-L2-02.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 3,
+    "cost": {
+      "black": 6
+    }
+  },
+  {
+    "id": "black-L2-03",
+    "image": "cards/black-L2-03.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 2,
+    "cost": {
+      "green": 5,
+      "red": 3
+    }
+  },
+  {
+    "id": "black-L2-04",
+    "image": "cards/black-L2-04.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 2,
+    "cost": {
+      "blue": 1,
+      "green": 4,
+      "red": 2
+    }
+  },
+  {
+    "id": "black-L2-05",
+    "image": "cards/black-L2-05.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 1,
+    "cost": {
+      "white": 3,
+      "blue": 2,
+      "green": 2
+    }
+  },
+  {
+    "id": "black-L2-06",
+    "image": "cards/black-L2-06.png",
+    "level": 2,
+    "bonus": "black",
+    "prestige_points": 1,
+    "cost": {
+      "white": 3,
+      "green": 3,
+      "black": 2
+    }
+  },
+  {
+    "id": "black-L3-01",
+    "image": "cards/black-L3-01.png",
+    "level": 3,
+    "bonus": "black",
+    "prestige_points": 4,
+    "cost": {
+      "red": 7
+    }
+  },
+  {
+    "id": "black-L3-02",
+    "image": "cards/black-L3-02.png",
+    "level": 3,
+    "bonus": "black",
+    "prestige_points": 4,
+    "cost": {
+      "green": 3,
+      "red": 6,
+      "black": 3
+    }
+  },
+  {
+    "id": "black-L3-03",
+    "image": "cards/black-L3-03.png",
+    "level": 3,
+    "bonus": "black",
+    "prestige_points": 3,
+    "cost": {
+      "white": 3,
+      "blue": 3,
+      "green": 5,
+      "red": 3
+    }
+  },
+  {
+    "id": "black-L3-04",
+    "image": "cards/black-L3-04.png",
+    "level": 3,
+    "bonus": "black",
+    "prestige_points": 5,
+    "cost": {
+      "red": 7,
+      "black": 3
+    }
+  }
+]
