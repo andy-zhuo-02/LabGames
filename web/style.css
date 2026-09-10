@@ -108,3 +108,10 @@ dialog{width:min(710px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overfl
 @media(max-width:700px) and (orientation:landscape){
  .live-hand .action-dock{width:42%}.live-hand .arena{min-width:300px;height:350px}.live-hand .requests-float{bottom:auto;top:10px}.live-hand .toast{bottom:12px}
 }
+
+/* Local artwork sits behind the UI; a fixed layer avoids mobile background-attachment issues. */
+body{background:var(--bg);isolation:isolate}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#0b161c26 0%,#0b161c40 55%,#0b161c80 100%),url("/room-background-v1.png") center / cover no-repeat}
+.topbar{background:#101b22b3}
+.sidebar{background:#111d248c;border-radius:14px}
+@media(max-width:700px){body::before{background-position:88% center}.topbar{background:#101b22d9}}

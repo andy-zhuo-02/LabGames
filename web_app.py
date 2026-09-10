@@ -207,7 +207,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(error)}, 400)
             return
         files = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"),
-                 "/app.js": ("app.js", "application/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml")}
+                 "/app.js": ("app.js", "application/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml"),
+                 "/room-background-v1.png": ("room-background-v1.png", "image/png")}
         if path not in files:
             self.send_error(404)
             return
@@ -218,9 +219,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(503, "Game assets are missing. Please restore the web directory.")
             return
         self.send_response(200)
-        self.send_header("Content-Type", content_type + "; charset=utf-8")
+        self.send_header("Content-Type", content_type + ("" if content_type.startswith("image/") else "; charset=utf-8"))
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "public, max-age=86400" if path == "/room-background-v1.png" else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; frame-ancestors 'self'; base-uri 'none'")
         self.end_headers()
