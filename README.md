@@ -1,6 +1,6 @@
 # 局域网小游戏 LabGames
 
-德州扑克与璀璨宝石共用一个 Git 仓库，两个游戏分别安装依赖、启动和保存进度。
+德州扑克、璀璨宝石与七连翻共用一个 Git 仓库，各个游戏独立启动和保存进度。
 
 ```text
 局域网小游戏LabGames/
@@ -8,12 +8,13 @@
 ├── .git/
 └── games/
     ├── poker/       # 德州扑克：Python / PokerKit
-    └── splendor/    # 璀璨宝石：Node.js / React / TypeScript
+    ├── splendor/    # 璀璨宝石：Node.js / React / TypeScript
+    └── flip7/       # 七连翻：Node.js / 原生 JavaScript，单人对战电脑
 ```
 
 ## 启动
 
-在本项目根目录分别打开两个终端。已有的启动脚本会自动切换到各自游戏目录。
+在本项目根目录打开终端，运行相应游戏的脚本。启动脚本会自动切换到各自游戏目录。
 
 德州扑克（允许同一局域网内的朋友加入）：
 
@@ -36,14 +37,23 @@
 
 默认监听局域网，端口为 `3000`。需要 Node.js 22.13+ 和 pnpm 11.19.0；现有脚本也支持此工作站的 Codex 内置运行环境。
 修改源码后运行 `./games/splendor/start.sh --rebuild`，开发模式为 `./games/splendor/start.sh --dev`。
-两个服务可以同时运行；各自在对应终端按 Ctrl+C 停止。
+各服务可以同时运行；各自在对应终端按 Ctrl+C 停止。
 
-完整安装步骤、玩法和参数见 [扑克说明](games/poker/README.md) 与 [璀璨宝石说明](games/splendor/README.md)。
+七连翻 Flip 7（第一版：单人对战电脑）：
+
+```bash
+./games/flip7/start.sh
+```
+
+打开 `http://localhost:3007`，需要 Node.js 22+，无需安装依赖或构建。支持 2～5 位电脑对手、中文牌桌、特殊牌、自动计分和刷新续局。第二版将加入多人局域网在线房间。
+
+完整安装步骤、玩法和参数见 [扑克说明](games/poker/README.md)、[璀璨宝石说明](games/splendor/README.md) 与 [七连翻说明](games/flip7/README.md)。
 
 ## 存档与迁移
 
 - 扑克存档位于 `games/poker/.poker-data/`，默认按端口区分数据库。
 - 璀璨宝石存档位于 `games/splendor/data/`。
+- 七连翻第一版存档位于浏览器 `localStorage`，需用同一浏览器、相同主机地址与端口继续对局。
 - 2026-09-10 合并时，已将两个原项目的数据库用 SQLite 备份接口迁入新目录，并复制本地比赛记录及璀璨宝石的依赖、构建产物。存档和依赖继续由各自的 `.gitignore` 排除，不会提交到仓库。
 - 原目录 `poker_simulator` 和 `splendor` 保留。迁移后在新目录继续开发、运行；原目录后续产生的存档或代码变化不会自动同步过来。
 - 原服务仍在运行时，先在其终端停止，再从新目录启动相同端口。使用原浏览器、原主机地址和原端口，可继续使用浏览器中已有的身份凭证；牌局恢复仍受各游戏的过期和重连规则约束。
@@ -74,4 +84,7 @@
 
 # 璀璨宝石：测试、类型检查与生产构建（pnpm 可用时）
 (cd games/splendor && pnpm check)
+
+# 七连翻：规则、300 局模拟与网页服务测试（无需安装依赖）
+./games/flip7/start.sh --test
 ```

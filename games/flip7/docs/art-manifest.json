@@ -1,0 +1,53 @@
+{
+  "retrieved": "2026-10-08",
+  "assets": [
+    {
+      "file": "numbers-a.png",
+      "source": "https://assets.dized.app/project/986ff6e2-2b04-485d-938d-8b26d21a4446/en-US/eb51938ff9a3aaa135a6ae051260d1ab/4970e891-d9ea-42c4-8c53-3752738e87cf-d41d8cd98f00b204e9800998ecf8427e.png",
+      "width": 1329,
+      "height": 279,
+      "bytes": 113732,
+      "sha256": "9403828f15d88ba77b3a72b1a1a167c46803524ec54a3a224b58a9918539a94f"
+    },
+    {
+      "file": "numbers-b.png",
+      "source": "https://assets.dized.app/project/986ff6e2-2b04-485d-938d-8b26d21a4446/en-US/eb51938ff9a3aaa135a6ae051260d1ab/4e71c888-fbb0-4d58-b47c-24c733d0e3c7-d41d8cd98f00b204e9800998ecf8427e.png",
+      "width": 1327,
+      "height": 270,
+      "bytes": 117966,
+      "sha256": "445c481a15508fad466cf204b05926a20cff79064bbbb95de2db04ba68f9f9eb"
+    },
+    {
+      "file": "numbers-c.png",
+      "source": "https://assets.dized.app/project/986ff6e2-2b04-485d-938d-8b26d21a4446/en-US/eb51938ff9a3aaa135a6ae051260d1ab/2316592c-def9-4c1b-a196-74cbc2567ec7-d41d8cd98f00b204e9800998ecf8427e.png",
+      "width": 776,
+      "height": 272,
+      "bytes": 70693,
+      "sha256": "862cf8028cc2801ffd3c9979c5367147fdcc34b07880279e30c7edd1df3cd33c"
+    },
+    {
+      "file": "modifiers.png",
+      "source": "https://assets.dized.app/project/986ff6e2-2b04-485d-938d-8b26d21a4446/en-US/eb51938ff9a3aaa135a6ae051260d1ab/18b0a8fc-e823-44ff-8009-0031943c1dcc-d41d8cd98f00b204e9800998ecf8427e.png",
+      "width": 1312,
+      "height": 267,
+      "bytes": 168890,
+      "sha256": "cfd4df9045cddc170335db8f977c0181da8e8b44c4c8ed08dd03cbea9020d054"
+    },
+    {
+      "file": "actions.png",
+      "source": "https://assets.dized.app/project/986ff6e2-2b04-485d-938d-8b26d21a4446/en-US/eb51938ff9a3aaa135a6ae051260d1ab/2065e814-eda9-4776-b4f8-e8ce4247cd51-d41d8cd98f00b204e9800998ecf8427e.png",
+      "width": 782,
+      "height": 268,
+      "bytes": 89433,
+      "sha256": "9a3a21607d9b4a9b9f1737d79013bf7330a5f416ed8934787d73bcfc40a9dbf3"
+    },
+    {
+      "file": "flip7-logo.png",
+      "source": "https://flip7-46611.web.app/assets/Flip-7-Logo-C2nj5RPA.png",
+      "width": 197,
+      "height": 120,
+      "bytes": 10905,
+      "sha256": "eec79574948bebbc11156b1e210561ade715f4c3885d88f5175e34230d4f7cfa"
+    }
+  ]
+}
