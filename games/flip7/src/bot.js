@@ -27,6 +27,7 @@ export function chooseBotAction(view, actorId) {
     targets.sort((a, b) => value(b) - value(a));
     return { type: "target", targetId: targets[0].id };
   }
+  if (view.opening) return { type: "hit" };
   const points = roundPoints(self);
   const threshold = { careful: 21, balanced: 28, bold: 36 }[self.style] ?? 28;
   const lead = Math.max(

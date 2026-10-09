@@ -9,7 +9,7 @@
 └── games/
     ├── poker/       # 德州扑克：Python / PokerKit
     ├── splendor/    # 璀璨宝石：Node.js / React / TypeScript
-    └── flip7/       # 七连翻：Node.js / 原生 JavaScript，单人对战电脑
+    └── flip7/       # 七连翻：Node.js / 原生 JavaScript，单人 / 局域网房间
 ```
 
 ## 启动
@@ -39,13 +39,13 @@
 修改源码后运行 `./games/splendor/start.sh --rebuild`，开发模式为 `./games/splendor/start.sh --dev`。
 各服务可以同时运行；各自在对应终端按 Ctrl+C 停止。
 
-七连翻 Flip 7（第一版：单人对战电脑）：
+七连翻 Flip 7（单人 / 局域网联机）：
 
 ```bash
 ./games/flip7/start.sh
 ```
 
-打开 `http://localhost:3007`，需要 Node.js 22+，无需安装依赖或构建。支持 2～5 位电脑对手、中文牌桌、特殊牌、自动计分和刷新续局。第二版将加入多人局域网在线房间。
+打开 `http://localhost:3007`，需要 Node.js 22+，无需安装依赖或构建。默认监听局域网。支持单人对战电脑和 3～6 人联机房间、邀请链接、真人与电脑混合、准备开局、断线重连与自动保存。
 
 完整安装步骤、玩法和参数见 [扑克说明](games/poker/README.md)、[璀璨宝石说明](games/splendor/README.md) 与 [七连翻说明](games/flip7/README.md)。
 
@@ -53,7 +53,7 @@
 
 - 扑克存档位于 `games/poker/.poker-data/`，默认按端口区分数据库。
 - 璀璨宝石存档位于 `games/splendor/data/`。
-- 七连翻第一版存档位于浏览器 `localStorage`，需用同一浏览器、相同主机地址与端口继续对局。
+- 七连翻单人存档位于浏览器 `localStorage`；联机牌局位于 `games/flip7/data/rooms.json`，浏览器保存席位身份。需用同一浏览器、相同主机地址与端口恢复自己的席位。
 - 2026-09-10 合并时，已将两个原项目的数据库用 SQLite 备份接口迁入新目录，并复制本地比赛记录及璀璨宝石的依赖、构建产物。存档和依赖继续由各自的 `.gitignore` 排除，不会提交到仓库。
 - 原目录 `poker_simulator` 和 `splendor` 保留。迁移后在新目录继续开发、运行；原目录后续产生的存档或代码变化不会自动同步过来。
 - 原服务仍在运行时，先在其终端停止，再从新目录启动相同端口。使用原浏览器、原主机地址和原端口，可继续使用浏览器中已有的身份凭证；牌局恢复仍受各游戏的过期和重连规则约束。

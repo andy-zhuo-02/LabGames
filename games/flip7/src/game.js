@@ -66,8 +66,14 @@ export function roundPoints(player) {
   );
 }
 
-function log(state, text, type = "info") {
-  state.events.push({ id: ++state.eventId, round: state.round, text, type });
+function log(state, text, type = "info", details = {}) {
+  state.events.push({
+    id: ++state.eventId,
+    round: state.round,
+    text,
+    type,
+    ...details,
+  });
   state.events = state.events.slice(-100);
 }
 
@@ -108,6 +114,9 @@ export function createGame({ players, seed = Date.now() } = {}) {
     lastDraw: null,
   };
   state.deck = shuffle(state, makeDeck());
+  log(state, "牌堆已洗好，准备轮流翻开第一张牌。", "shuffle", {
+    initial: true,
+  });
   startRound(state);
   return state;
 }
@@ -132,9 +141,13 @@ function startRound(state) {
   state.phase = "playing";
   state.lastDraw = null;
   state.resume = state.starter;
-  state.queue = state.players.map((_, i) =>
-    drawTask(state.players[(state.starter + i) % state.players.length].id, 1),
-  );
+  state.queue = state.players.map((_, i) => ({
+    ...drawTask(
+      state.players[(state.starter + i) % state.players.length].id,
+      1,
+    ),
+    manual: true,
+  }));
   log(
     state,
     `第 ${state.round} 轮开始，${state.players[state.starter].name} 先手。`,
@@ -195,13 +208,20 @@ export function currentActor(state) {
 export function canStay(player) {
   return player.status === "active" && player.cards.length > 0;
 }
+export function isOpeningTurn(state) {
+  return (
+    state.phase === "playing" &&
+    state.queue[0]?.kind === "draw" &&
+    state.queue[0].manual === true
+  );
+}
 
 function takeCard(state) {
   if (!state.deck.length) {
     if (!state.discard.length) throw new Error("牌堆已空且没有可洗回的弃牌");
     state.deck = shuffle(state, state.discard);
     state.discard = [];
-    log(state, "牌堆用尽，洗入弃牌；本轮桌面上的牌保留。");
+    log(state, "牌堆用尽，洗入弃牌；本轮桌面上的牌保留。", "shuffle");
   }
   return state.deck.pop();
 }
@@ -209,7 +229,11 @@ function takeCard(state) {
 function receive(state, task, card) {
   const p = state.players.find((p) => p.id === task.owner);
   state.lastDraw = { playerId: p.id, card, eventId: state.eventId + 1 };
-  log(state, `${p.name} 翻出 ${cardLabel(card)}。`, "draw");
+  log(state, `${p.name} 翻出 ${cardLabel(card)}。`, "draw", {
+    playerId: p.id,
+    cardKind: card.kind,
+    cardId: card.id,
+  });
   if (card.kind === "number") {
     if (numbers(p).includes(card.value)) {
       const secondIndex = p.cards.findIndex((c) => c.kind === "second");
@@ -271,6 +295,9 @@ function advance(state) {
         state.queue.shift();
         if (player.status === "active") state.queue.unshift(...task.deferred);
         else state.discard.push(...task.deferred.map((t) => t.card));
+      } else if (task.manual) {
+        state.turn = state.players.indexOf(player);
+        return;
       } else {
         task.remaining--;
         receive(state, task, takeCard(state));
@@ -303,10 +330,20 @@ export function applyAction(previous, actorId, action) {
         state,
         `${state.players.find((p) => p.id === actorId).name} 对 ${target.name} 使用${cardLabel(effect.card)}。`,
         "action",
+        {
+          playerId: actorId,
+          targetId: target.id,
+          cardKind: effect.card.kind,
+          cardId: effect.card.id,
+        },
       );
       if (effect.card.kind === "freeze") target.status = "frozen";
       if (effect.card.kind === "three")
         state.queue.unshift(drawTask(target.id, 3));
+      advance(state);
+    } else if (isOpeningTurn(state)) {
+      if (action.type !== "hit") throw new Error("开场请先翻自己的第一张牌");
+      state.queue[0].manual = false;
       advance(state);
     } else {
       const p = state.players[state.turn];
@@ -333,10 +370,11 @@ export function publicView(state) {
     discardCount: discard.length,
     pending: pendingEffect(copy),
     actorId: currentActor(copy),
+    opening: isOpeningTurn(copy),
   };
 }
 
-export function validateSave(state) {
+export function validateSave(state, { requireLocalPlayer = true } = {}) {
   try {
     if (
       state?.schema !== SAVE_VERSION ||
@@ -351,7 +389,8 @@ export function validateSave(state) {
       !Number.isInteger(state.revision) ||
       !Array.isArray(state.history) ||
       !Array.isArray(state.events) ||
-      !state.players.some((p) => p.id === "you" && !p.bot) ||
+      (requireLocalPlayer &&
+        !state.players.some((p) => p.id === "you" && !p.bot)) ||
       new Set(state.players.map((p) => p.id)).size !== state.players.length
     )
       return false;
@@ -384,6 +423,8 @@ export function validateSave(state) {
               Number.isInteger(t.remaining) &&
               t.remaining >= 0 &&
               t.remaining <= 3 &&
+              (t.manual === undefined || typeof t.manual === "boolean") &&
+              (!t.manual || t.remaining === 1) &&
               Array.isArray(t.deferred))),
       )
     )

@@ -11,6 +11,7 @@ import {
   currentActor,
   validateSave,
   canStay,
+  isOpeningTurn,
 } from "../src/game.js";
 import { chooseBotAction } from "../src/bot.js";
 
@@ -78,22 +79,58 @@ test("standard deck: 94 unique cards with the correct number distribution", () =
   assert.equal(deck.filter((c) => c.kind === "multiply").length, 1);
 });
 
-test("seeded games are deterministic, and initial actions resolve before later dealing", () => {
+test("new games wait for each seat to flip its own opening card", () => {
   const a = createGame({ players, seed: 3 });
   assert.deepEqual(a, createGame({ players, seed: 3 }));
   assert.ok(validateSave(a));
-  let initialActionFound = false;
-  for (let seed = 1; seed < 100; seed++) {
-    let s = createGame({ players, seed });
-    if (pendingEffect(s)) {
-      initialActionFound = true;
-      const actor = currentActor(s);
-      assert.throws(() => applyAction(s, actor, { type: "hit" }), /有效目标/);
-      s = target(s, pendingEffect(s).targets[0]);
-      assert.ok(validateSave(s));
-    }
+  assert.equal(a.deck.length, 94);
+  assert.ok(a.players.every((p) => !p.cards.length));
+  assert.equal(a.lastDraw, null);
+  assert.equal(publicView(a).opening, true);
+  let s = fixture({ draws: [1, 2, 3] });
+  s.queue = a.queue;
+  for (const [index, player] of players.entries()) {
+    assert.equal(currentActor(s), player.id);
+    assert.ok(isOpeningTurn(s));
+    assert.throws(() => applyAction(s, player.id, { type: "stay" }), /第一张/);
+    s = applyAction(s, player.id, { type: "hit" });
+    assert.equal(s.players[index].cards.length, 1);
+    assert.ok(s.players.slice(index + 1).every((p) => !p.cards.length));
   }
-  assert.ok(initialActionFound);
+  assert.equal(currentActor(s), "you");
+  assert.equal(isOpeningTurn(s), false);
+  assert.deepEqual(s.players.map(numbers), [[1], [2], [3]]);
+  assert.ok(validateSave(s));
+});
+
+test("opening actions resolve first, and frozen opening seats are skipped", () => {
+  let s = fixture({ draws: ["freeze", 6] });
+  s.queue = createGame({ players, seed: 3 }).queue;
+  s = hit(s);
+  assert.equal(pendingEffect(s).owner, "you");
+  assert.ok(s.players.every((p) => !p.cards.length));
+  assert.throws(() => applyAction(s, "b", { type: "hit" }), /轮到/);
+  s = target(s, "b");
+  assert.equal(currentActor(s), "c");
+  s = applyAction(s, "c", { type: "hit" });
+  assert.equal(currentActor(s), "you");
+  assert.equal(isOpeningTurn(s), false);
+  assert.ok(validateSave(s));
+});
+
+test("receiving Flip Three before an opening turn does not replace that seat's own flip", () => {
+  let s = fixture({ draws: ["three", 10, 11, 12, 9, 8] });
+  s.queue = createGame({ players, seed: 3 }).queue;
+  s = target(hit(s), "b");
+  assert.equal(currentActor(s), "b");
+  assert.deepEqual(numbers(s.players[1]), [10, 11, 12]);
+  assert.ok(isOpeningTurn(s));
+  assert.throws(() => applyAction(s, "b", { type: "stay" }), /第一张/);
+  assert.deepEqual(chooseBotAction(publicView(s), "b"), { type: "hit" });
+  s = applyAction(s, "b", { type: "hit" });
+  assert.deepEqual(numbers(s.players[1]), [10, 11, 12, 9]);
+  assert.equal(currentActor(s), "c");
+  assert.ok(validateSave(JSON.parse(JSON.stringify(s))));
 });
 
 test("a normal hit moves play on, and does not mutate previous state", () => {
@@ -347,6 +384,9 @@ test("tie at 200 continues with every player, remaining deck preserved and start
   s = applyAction(s, "you", { type: "nextRound" });
   assert.equal(s.starter, 1);
   assert.equal(currentActor(s), "b");
+  assert.equal(s.deck.length, 4);
+  assert.ok(s.players.every((p) => !p.cards.length));
+  for (const id of ["b", "c", "you"]) s = applyAction(s, id, { type: "hit" });
   assert.equal(s.deck.length, 1);
   assert.deepEqual(
     s.players.map((p) => numbers(p)),
@@ -364,6 +404,7 @@ test("mid-round reshuffle keeps every table card, even busted duplicates, out of
   );
   const tableIds = s.players.flatMap((p) => p.cards.map((c) => c.id));
   assert.ok(s.deck.every((c) => !tableIds.includes(c.id)));
+  assert.equal(s.events.filter((event) => event.type === "shuffle").length, 1);
   assert.ok(validateSave(s));
 });
 

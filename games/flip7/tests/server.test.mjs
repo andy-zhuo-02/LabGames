@@ -22,6 +22,8 @@ test("serves the game and modules; private files are not exposed", async (t) => 
   for (const [path, contentType] of [
     ["/", "text/html"],
     ["/app.js", "text/javascript"],
+    ["/network.js", "text/javascript"],
+    ["/presentation.js", "text/javascript"],
     ["/card-art.js", "text/javascript"],
     ["/src/game.js", "text/javascript"],
     ["/src/bot.js", "text/javascript"],
@@ -77,13 +79,16 @@ test("serves the game and modules; private files are not exposed", async (t) => 
     "/missing",
     "/art/missing.png",
     "/docs/art-manifest.json",
+    "/data/rooms.json",
+    "/src/rooms.js",
+    "/src/card-tracker.js",
   ])
     assert.equal((await fetch(base + path)).status, 404);
   const health = await fetch(base + "/api/health");
   assert.deepEqual(await health.json(), {
     ok: true,
-    version: "0.1.0",
-    mode: "solo",
+    version: "0.2.0",
+    mode: "solo+lan",
   });
   const head = await fetch(base, { method: "HEAD" });
   assert.equal(head.status, 200);

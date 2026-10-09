@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#32338d" />
     <meta
       name="description"
-      content="七连翻 Flip 7：再翻一张，还是见好就收？与电脑对手展开一场运气与选择的较量。"
+      content="七连翻 Flip 7：单人挑战电脑，或与朋友通过局域网同桌翻牌，争夺 200 分。"
     />
     <title>七连翻 · Flip 7 | LabGames</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -15,8 +15,71 @@
   </head>
   <body>
     <div id="app"></div>
+    <aside id="danmaku-panel" aria-label="全桌弹幕" hidden>
+      <div class="danmaku-toolbar">
+        <strong>全桌弹幕</strong>
+        <div class="danmaku-quick" aria-label="快捷弹幕">
+          <button type="button" data-danmaku-quick="再翻一张！">
+            再翻一张！
+          </button>
+          <button type="button" data-danmaku-quick="见好就收～">
+            见好就收～
+          </button>
+          <button type="button" data-danmaku-quick="七连翻！">七连翻！</button>
+        </div>
+        <button type="button" id="danmaku-toggle" aria-pressed="true">
+          弹幕：开
+        </button>
+      </div>
+      <form id="danmaku-form">
+        <label class="sr-only" for="danmaku-input">弹幕内容</label>
+        <input
+          id="danmaku-input"
+          type="text"
+          maxlength="80"
+          autocomplete="off"
+          placeholder="发条弹幕，最多 40 字"
+          aria-describedby="danmaku-feedback"
+        />
+        <span id="danmaku-count" aria-hidden="true">0/40</span>
+        <button type="submit" id="danmaku-send">发送</button>
+      </form>
+      <p id="danmaku-feedback" class="sr-only" role="status">
+        每 2 秒可以发送一条，关闭弹幕仅影响自己的画面。
+      </p>
+    </aside>
+    <div id="danmaku-layer" aria-hidden="true" hidden></div>
+    <div
+      id="danmaku-announcer"
+      class="sr-only"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+    ></div>
     <dialog id="modal" aria-labelledby="modal-title"></dialog>
+    <div
+      id="table-alert"
+      popover="manual"
+      role="status"
+      aria-live="assertive"
+      aria-atomic="true"
+      hidden
+    ></div>
     <div id="toast" role="status" aria-live="polite"></div>
+    <div
+      id="shuffle-notice"
+      popover="manual"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+    <div
+      id="celebration"
+      popover="manual"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
     <div
       id="announcer"
       class="sr-only"
