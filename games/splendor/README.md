@@ -4,67 +4,30 @@
 
 基础版璀璨宝石网页游戏，支持 2～4 个席位、真人与电脑混合，也可单人对战最多三位电脑。一台电脑运行服务，其余玩家通过同一局域网内的浏览器加入。
 
-## 环境依赖
+## 统一安装与启动
 
-| 依赖    | 版本                         | 用途                          |
-| ------- | ---------------------------- | ----------------------------- |
-| Node.js | 22.13+，也可使用 24 系列     | HTTP、Socket.IO 与内置 SQLite |
-| pnpm    | 11.19.0                      | 安装锁定依赖、开发与构建      |
-| 浏览器  | 支持现代 JavaScript 的浏览器 | 游戏客户端                    |
+与其他两个游戏共用 **Node.js 22.13+（推荐 24）和 npm**。不需要单独安装 pnpm、TypeScript 或数据库。
 
-运行依赖包括 React / React DOM 19.1.1、Express 5.1.0、Socket.IO / Socket.IO Client 4.8.1、Zod 4.1.5、qrcode 1.5.4 和 lucide-react 0.468.0。开发工具包括 TypeScript、Vite、tsx、Vitest 和 Prettier。
-
-具体版本见 [package.json](package.json)，完整依赖锁定在 [pnpm-lock.yaml](pnpm-lock.yaml)。服务使用 Node 内置的 `node:sqlite`，不需要安装独立数据库。电脑策略在本机运行，无需 API Key。
-
-## 首次安装
-
-先安装所需版本的 Node.js，再准备 pnpm。以下命令从仓库根目录开始：
+在仓库根目录执行：
 
 ```bash
-npm install -g pnpm@11.19.0
-cd games/splendor
-pnpm install --frozen-lockfile
-pnpm build
+npm install                    # 首次安装全部游戏依赖
+npm start -- splendor          # 自动构建并启动
+npm run dev -- splendor        # 开发模式
 ```
 
-已有对应版本 pnpm 时可跳过全局安装。首次下载依赖需要联网；安装并构建完成后，游戏运行不依赖互联网。
+本机访问 [http://localhost:3000](http://localhost:3000)。默认允许局域网连接，终端会显示朋友可访问的地址。按 `Ctrl+C` 停止。Windows、macOS、Linux 使用同一套命令。
 
-## 启动
+依赖包括 React、Express、Socket.IO、Zod、qrcode；Vite、TypeScript 等工具均由 npm 随项目安装。版本统一锁定在根目录 `package-lock.json`，不需要全局安装任何开发工具。
 
-在 `games/splendor/` 目录运行：
+| 配置 | 默认值 | 作用 |
+| --- | --- | --- |
+| `SPLENDOR_PORT` | `3000` | 统一启动器中的服务端口 |
+| `PORT` | `3000` | 单独启动时也可使用 |
+| `HOST` | `0.0.0.0` | 设为 `127.0.0.1` 时仅本机 |
+| `DATA_DIR` | `data` | 相对游戏目录的数据目录 |
 
-```bash
-pnpm start
-```
-
-本机访问 [http://localhost:3000](http://localhost:3000)。默认监听 `0.0.0.0:3000`，允许局域网设备连接。将终端输出的局域网地址发给朋友，保持主机和终端运行；按 `Ctrl+C` 停止。
-
-Linux / macOS 也可以从仓库根目录使用启动脚本：
-
-```bash
-./games/splendor/start.sh
-```
-
-脚本会在缺少 `node_modules/` 时安装依赖，在缺少构建产物时构建。已安装依赖但修改了依赖声明或锁文件后，应重新执行 `pnpm install --frozen-lockfile`。修改源码后使用 `--rebuild` 更新产物。
-
-### 常用配置
-
-| 配置                    | 默认值 | 作用                           |
-| ----------------------- | ------ | ------------------------------ |
-| `PORT`                  | `3000` | 服务端口                       |
-| `DATA_DIR`              | `data` | 数据目录，相对路径基于游戏目录 |
-| `--rebuild`（启动脚本） | 关闭   | 重新构建后启动                 |
-| `--dev`（启动脚本）     | 关闭   | 开发模式，前后端共用一个端口   |
-
-以下命令从仓库根目录执行：
-
-```bash
-PORT=3010 DATA_DIR=/绝对路径/splendor-data ./games/splendor/start.sh
-./games/splendor/start.sh --rebuild
-./games/splendor/start.sh --dev
-```
-
-脚本在本工作站未全局安装 Node.js 时，也可识别 Codex 内置运行环境；普通电脑按上述步骤安装 Node.js 和 pnpm 即可。
+旧 `./games/splendor/start.sh` 仍可用，现转发到 npm；`--dev`、`--test`、`--rebuild` 均有对应入口。升级前如果保留了 pnpm 生成的 `node_modules/`，先移走该依赖目录再在根目录执行 `npm install`，不要移动存档 `data/`。
 
 ## 与朋友联机
 
@@ -90,10 +53,10 @@ PORT=3010 DATA_DIR=/绝对路径/splendor-data ./games/splendor/start.sh
 在游戏目录中执行：
 
 ```bash
-pnpm dev               # 开发服务器
-pnpm test              # 规则、模拟与 Socket.IO 联机测试
-pnpm build             # 类型检查、网页构建与服务端编译
-pnpm check             # 测试与构建
+npm run dev               # 开发服务器
+npm test              # 规则、模拟与 Socket.IO 联机测试
+npm run build             # 类型检查、网页构建与服务端编译
+npm run check             # 测试与构建
 ```
 
 构建输出为 `dist/`（网页）和 `dist-server/`（服务端）。生产服务同时提供网页与联机接口，无需额外启动静态服务器。
@@ -111,7 +74,7 @@ BASE_URL=http://localhost:3010 node scripts/smoke.mjs
 ## 常见问题
 
 - **Node 版本不满足要求：** 升级到 22.13 或更高版本；本项目依赖内置 SQLite。
-- **提示缺少构建文件或修改未生效：** 运行 `pnpm build`，或使用启动脚本的 `--rebuild`。
+- **提示缺少构建文件或修改未生效：** 运行 `npm run build`，或使用启动脚本的 `--rebuild`。
 - **朋友连不上：** 分享主机局域网 IP，确保同一网络未开启访客隔离，并允许服务端口通过主机防火墙。有多块网卡时选择实际使用的 Wi-Fi 或有线地址。
 - **刷新后没有回到原座位：** 检查浏览器、访问地址、端口和数据目录是否与之前一致。
 

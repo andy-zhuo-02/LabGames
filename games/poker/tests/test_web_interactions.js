@@ -1,9 +1,11 @@
 "use strict";
 // Unit tests against production functions, using small element stubs, not a browser.
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, "../web/app.js"), "utf8");
 const html = fs.readFileSync(path.join(__dirname, "../web/index.html"), "utf8");
 const nodes = new Map(), storage = new Map();

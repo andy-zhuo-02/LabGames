@@ -1,132 +1,86 @@
 # 德州扑克 · 河牌俱乐部
 
-[← 返回 LabGames 游戏总览](../../README.md) · [玩法与进阶说明](docs/GUIDE.md)
+[← 返回 LabGames](../../README.md) · [玩法与命令行](docs/GUIDE.md) · [技术栈与迁移](../../docs/TECH_STACK.md)
 
-基于 PokerKit 的无限注德州扑克，支持浏览器单人练习、2～6 人局域网好友房间，以及命令行模拟。默认每人 2,000 虚拟筹码，固定盲注 10 / 20，无前注、无抽水。
+Node.js 实现的无限注德州扑克，支持单人练习、2～6 人局域网好友房和命令行模拟。默认每人 2,000 虚拟筹码，盲注 10 / 20，无前注、无抽水。八种电脑策略只使用自己的底牌和公开信息。
 
-## 环境依赖
+## 统一安装与启动
 
-只需运行服务的电脑安装依赖；其他玩家使用浏览器即可。
-
-| 依赖               | 版本               | 用途                            |
-| ------------------ | ------------------ | ------------------------------- |
-| Python             | 3.11+              | 游戏引擎、HTTP 服务与命令行程序 |
-| PokerKit           | 0.7.5              | 德州扑克规则与牌型计算          |
-| qrcode             | 8.2                | 本地生成邀请二维码              |
-| Matplotlib（可选） | 3.10.3             | 绘制机器人比赛筹码曲线          |
-| Node.js（可选）    | 22+ 可用于运行检查 | 前端逻辑测试，游玩时不需要      |
-
-运行依赖固定在 [requirements.txt](requirements.txt)，绘图依赖固定在 [requirements-plot.txt](requirements-plot.txt)。网页使用 Python 标准库 HTTP 服务和原生 JavaScript，不需要 npm、前端构建或额外 Web 框架。
-
-## 首次安装
-
-以下命令从仓库根目录开始，进入游戏目录后执行后续命令。
+与其他两个游戏共用 **Node.js 22.13+（推荐 24）和 npm**。无需 Python、Conda、pip 或独立数据库。在仓库根目录执行：
 
 ```bash
-cd games/poker
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+npm install                   # 首次安装整个仓库
+npm start -- poker            # 启动扑克
+npm run dev -- poker          # 开发模式
 ```
 
-Windows 可用 `py -m venv .venv` 创建环境，然后在 PowerShell 中运行 `.\.venv\Scripts\Activate.ps1` 激活，再执行同一条安装命令。
+本机访问 [http://localhost:8765](http://localhost:8765)。默认允许局域网连接，终端会显示朋友可访问的地址。按 `Ctrl+C` 停止。Windows、macOS、Linux 使用相同命令。
 
-也可以使用 Conda：
+网页使用原生 JavaScript，无需构建。服务和 SQLite 均使用 Node 内置模块；邀请二维码使用 npm 安装的 `qrcode`，与宝石共用同一依赖版本。首次安装需要联网，游戏运行无需外部服务。
+
+旧 `./games/poker/start_game.sh` 现转发到 npm，不再激活 Conda。也可在游戏目录执行 `npm start` 或 `node server.mjs`。
+
+## 配置
+
+| 配置 | 默认值 | 作用 |
+| --- | --- | --- |
+| `POKER_PORT` | `8765` | 统一启动器中的端口 |
+| `PORT` / `--port` | `8765` | 单独启动时指定端口 |
+| `HOST` / `--host` | `0.0.0.0` | `127.0.0.1` 限制为仅本机 |
+| `POKER_DATA_FILE` / `--save-file` | `.poker-data/table-端口.node.sqlite3` | 存档文件 |
+| `--no-save` | 关闭 | 临时游玩，不读写存档 |
+| `--import-save` | 未指定 | 从旧 Python 存档复制导入到新文件 |
+
+根目录示例：
 
 ```bash
-cd games/poker  # 如果已经在此目录，请跳过
-conda create -n poker python=3.14 pip
-conda activate poker
-python -m pip install -r requirements.txt
+npm start -- poker --port 8767 --no-save
+npm start -- poker --host 127.0.0.1
 ```
 
-已有 `poker` 环境时直接激活并安装依赖即可，无需重复创建。首次安装需要联网。
-
-## 启动
-
-在 `games/poker/` 目录、已激活的 Python 环境中运行：
-
-```bash
-# 仅本机游玩，启动后自动打开浏览器
-python web_app.py
-
-# 允许同一局域网的朋友加入
-python web_app.py --lan
-```
-
-本机访问 [http://127.0.0.1:8765](http://127.0.0.1:8765)。联机时将启动输出中的局域网地址发给朋友。保持终端开启，按 `Ctrl+C` 停止服务。
-
-Linux / macOS 使用名为 `poker` 的 Conda 环境时，也可从仓库根目录运行：
-
-```bash
-./games/poker/start_game.sh --lan
-```
-
-`start_game.sh` 使用已有的 `poker` 环境，不会创建环境或安装依赖；使用 `.venv` 时请直接运行 `python web_app.py`。
-
-### 常用参数
-
-| 参数                                  | 作用                           |
-| ------------------------------------- | ------------------------------ |
-| `--lan`                               | 从仅本机监听改为允许局域网访问 |
-| `--port 8767`                         | 自定义端口，默认 `8765`        |
-| `--no-browser`                        | 启动时不自动打开浏览器         |
-| `--save-file /绝对路径/table.sqlite3` | 指定牌局存档文件               |
-| `--no-save`                           | 临时游玩，既不读取也不写入存档 |
-
-```bash
-python web_app.py --lan --port 8767 --no-browser
-```
+保留兼容参数 `--lan` 与 `--no-browser`；默认不自动打开浏览器。
 
 ## 与朋友联机
 
-1. 主机使用 `--lan` 启动，房主点击「和朋友玩」，设置昵称、人数、行动限时和电脑补位。
-2. 分享邀请链接或二维码。朋友连接同一网络后打开链接并申请加入，由房主批准。
-3. 全体真人准备后开始；每手结算后共同准备下一手。
+1. 房主打开「和朋友玩」，设置昵称、人数、行动限时和电脑补位。
+2. 分享邀请链接或二维码。朋友在同一网络打开链接并申请加入，由房主批准。
+3. 全体真人准备后开局，每手结束后共同准备下一手。
 
-支持真人与电脑混坐、进行中申请加入后等待下一手、暂时离席和恢复原座位。详细操作、倒计时与恢复码说明见 [玩法与进阶说明](docs/GUIDE.md)。
+支持局中申请、下一手入座、暂时离席、房主转交、座位恢复码、逐手复盘和筹码曲线。底牌只在规则允许时公开，等待审批者看不到牌桌私有信息。
 
-## 存档与备份
+## 存档和旧版升级
 
-默认存档为 `games/poker/.poker-data/table-端口号.sqlite3`。不同端口默认使用不同存档，也可用 `--save-file` 固定路径。
+默认 Node 存档位于 `games/poker/.poker-data/table-端口.node.sqlite3`。同一存档不能由两个服务同时写入；备份前停止服务，再复制存档目录。继续牌局请使用原浏览器、相同主机地址与端口。
 
-- 使用同一浏览器、相同主机地址与端口访问，可恢复原身份和牌局。
-- 服务重启会恢复未过期的单人牌桌和好友房；超过 24 小时无人访问的房间和会话不再恢复。
-- 好友房玩家可提前保存自己的座位恢复码，换设备时找回仍存在的座位。
-- 备份前停止服务，再复制存档目录或自定义存档所在目录；同一个存档不要由多个进程同时使用。
-- 存档包含底牌与身份信息，已被 Git 忽略。
+首次启动且新版文件不存在时，会检查同端口旧 `.poker-data/table-端口.sqlite3`，只读导入 24 小时内仍有效的会话和房间，**原文件保留**。导入会重放牌堆与操作并核对筹码；损坏或不兼容的存档会报错，不会默默清空。先停止旧 Python 服务，避免同时继续两个版本的牌局。
 
-## 命令行、模拟与测试
-
-在游戏目录中执行：
+自定义存档：
 
 ```bash
-python play_poker.py                         # 命令行游玩
-python play_poker.py --list-bots             # 查看八种电脑策略
-python play_poker.py --simulate 1000 --seed 42
-python -m unittest discover -s tests -v      # Python 回归测试
+npm start -- poker --save-file /绝对路径/new.node.sqlite3 --import-save /绝对路径/old.sqlite3
 ```
 
-如已安装 Node.js，可运行前端逻辑测试，无需额外安装 JavaScript 依赖：
+导入目标必须不存在。后续启动仅传 `--save-file`。恢复中的真人房间会等待玩家重连后再行动。已过期房间沿用原先的 24 小时淘汰规则。
+
+## 测试与辅助工具
+
+仓库根目录：
 
 ```bash
-node tests/test_turn_clock.js
-node tests/test_web_interactions.js
+npm test --workspace games/poker
+npm run check --workspace games/poker
 ```
 
-机器人锦标赛及可选绘图：
+在游戏目录中：
 
 ```bash
-python tournament.py --seed 42
-python -m pip install -r requirements-plot.txt
-python plot_tournament.py runs/你的比赛目录
+node cli.mjs                                   # 命令行游玩
+node cli.mjs --list-bots
+node cli.mjs --simulate 1000 --seed 42
+node tournament.mjs --seed 42                  # 八策略同桌比赛
+node plot-tournament.mjs runs/你的比赛目录       # SVG 曲线，无额外绘图库
 ```
 
-CLI 操作、策略差异、模拟参数、输出格式和代码结构详见 [进阶文档](docs/GUIDE.md)。
+测试包括 160 组旧 PokerKit 固定牌局对照、八策略模拟、房间权限、HTTP 身份、二维码、旧存档导入和服务器重启恢复。更改后的随机数序列与旧 Python 版不同，新版自己的固定种子与保存的完整牌堆可用于复现。
 
-## 常见问题
-
-- **找不到 `poker` 环境：** 按首次安装创建 Conda 环境，或使用 `.venv` 并直接运行 Python 命令。
-- **缺少 `pokerkit` 或 `qrcode`：** 在启动服务所用的同一个 Python 环境里执行 `python -m pip install -r requirements.txt`。
-- **端口被占用：** 若已有服务在运行，先打开原地址；需要另开一桌服务时用 `--port` 指定其他端口。
-- **朋友连不上：** 确认使用 `--lan`、分享的是主机局域网地址、设备在同一网络，并允许对应端口通过主机防火墙。
+旧 Python 源码与测试仅作为历史参考保存在 `archive/poker-python/`，不参与当前安装、启动与测试。所有当前入口均为 Node.js。

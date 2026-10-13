@@ -1,0 +1,19 @@
+{
+  "name": "@labgames/poker",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test tests/*.test.mjs tests/test_turn_clock.js tests/test_web_interactions.js",
+    "check": "node --check server.mjs && node --check web/app.js && npm test",
+    "simulate": "node cli.mjs --simulate 1000"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  }
+}

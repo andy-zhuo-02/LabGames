@@ -19,7 +19,7 @@ if (dev) {
   closeVite = () => vite.close();
 } else {
   const directory = resolve('dist');
-  if (!existsSync(resolve(directory, 'index.html'))) throw new Error('请先运行 pnpm build');
+  if (!existsSync(resolve(directory, 'index.html'))) throw new Error('请先运行 npm run build');
   service.app.use(express.static(directory));
   service.app.get('/{*path}', (_req, res) => res.sendFile(resolve(directory, 'index.html')));
 }
@@ -27,7 +27,7 @@ service.http.on('error', (error) => {
   console.error('启动失败：', error.message);
   process.exitCode = 1;
 });
-service.http.listen(port, '0.0.0.0', () => {
+service.http.listen(port, process.env.HOST ?? '0.0.0.0', () => {
   console.log(`\n璀璨宝石 · 局域网联机\n本机：http://localhost:${port}`);
   for (const url of lanAddresses(port)) console.log(`局域网：${url}`);
   console.log('让其他玩家在同一网络中打开局域网地址。按 Ctrl+C 停止。\n');

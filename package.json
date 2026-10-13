@@ -1,0 +1,22 @@
+{
+  "name": "labgames",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "games/poker",
+    "games/splendor",
+    "games/flip7"
+  ],
+  "scripts": {
+    "start": "node scripts/labgames.mjs start",
+    "dev": "node scripts/labgames.mjs dev",
+    "build": "npm run build --workspaces --if-present",
+    "test": "node --test tests/*.test.mjs && npm run test --workspaces",
+    "check": "node --test tests/*.test.mjs && npm run check --workspaces",
+    "doctor": "node scripts/labgames.mjs doctor"
+  }
+}

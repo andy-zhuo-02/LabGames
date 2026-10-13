@@ -1,9 +1,11 @@
 "use strict";
 // Exercise the actual clock and notification logic without a browser or UI automation.
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const path = require("node:path");
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.join(__dirname, "../web/app.js"), "utf8");
 let now = 1000;
 const classes = new Set();
