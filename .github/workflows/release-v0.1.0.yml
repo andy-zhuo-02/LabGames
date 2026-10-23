@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - v0.1.0
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-v0.1.0.yml
 
 permissions:
   contents: read
@@ -24,13 +28,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_TAG: v0.1.0
         shell: bash
         run: |
           set -euo pipefail
           notes="$RUNNER_TEMP/release-notes.md"
-          gh api "repos/$GH_REPO/contents/docs/releases/v0.1.0.md?ref=$RELEASE_SHA" \
+          gh api "repos/$GH_REPO/contents/docs/releases/v0.1.0.md?ref=$RELEASE_TAG" \
             --jq '.content' | base64 --decode > "$notes"
           test -s "$notes"
           if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
