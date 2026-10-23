@@ -12,6 +12,7 @@ const games = {
     file: "dist-server/server/index.js",
   },
   flip7: { name: "七连翻", port: 3007, file: "server.mjs" },
+  quoridor: { name: "步步为营", port: 3009, file: "server.mjs" },
 };
 const [command = "start", selection = "all", ...extra] = process.argv.slice(2);
 const [major, minor] = process.versions.node.split(".").map(Number);
@@ -24,7 +25,7 @@ if (
   (selection !== "all" && !Object.hasOwn(games, selection))
 ) {
   console.error(
-    "用法：npm start -- [poker|splendor|flip7|all]；npm run dev -- [游戏]；npm run doctor",
+    "用法：npm start -- [poker|splendor|flip7|quoridor|all]；npm run dev -- [游戏]；npm run doctor",
   );
   process.exit(1);
 }
@@ -39,7 +40,7 @@ try {
 }
 if (command === "doctor") {
   console.log(
-    `Node.js ${process.versions.node} · 依赖已就绪\n三个游戏共用 Node.js 和 npm，无需 Python、Conda 或 pnpm。`,
+    `Node.js ${process.versions.node} · 依赖已就绪\n四个游戏共用 Node.js 和 npm，无需 Python、Conda 或 pnpm。`,
   );
   for (const [id, game] of Object.entries(games))
     console.log(`${game.name}：npm start -- ${id}`);
@@ -47,7 +48,7 @@ if (command === "doctor") {
 }
 if (selection === "all" && extra.length) {
   console.error(
-    "额外参数只能用于单个游戏。多游戏端口请用 POKER_PORT、SPLENDOR_PORT、FLIP7_PORT 设置。",
+    "额外参数只能用于单个游戏。多游戏端口请用 POKER_PORT、SPLENDOR_PORT、FLIP7_PORT、QUORIDOR_PORT 设置。",
   );
   process.exit(1);
 }

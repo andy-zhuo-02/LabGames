@@ -18,6 +18,8 @@ test("shared launcher checks dependencies and rejects invalid games and ports", 
     [["start", "missing"], {}, 1],
     [["start", "all"], { POKER_PORT: "3000" }, 1],
     [["start", "poker"], { POKER_PORT: "NaN" }, 1],
+    [["start", "quoridor"], { QUORIDOR_PORT: "NaN" }, 1],
+    [["start", "all"], { QUORIDOR_PORT: "3007" }, 1],
   ]) {
     const r = spawnSync(process.execPath, [launcher, ...args], {
       env: { ...process.env, ...env },
@@ -26,59 +28,61 @@ test("shared launcher checks dependencies and rejects invalid games and ports", 
     assert.equal(r.status, expected, r.stderr);
   }
 });
-test(
-  "one command launches a game on its configured port and stops its child",
-  { timeout: 15000 },
-  async (t) => {
-    const reservation = createServer();
-    reservation.listen(0, "127.0.0.1");
-    await once(reservation, "listening");
-    const port = reservation.address().port;
-    await new Promise((r) => reservation.close(r));
-    const dir = mkdtempSync(join(tmpdir(), "labgames-launcher-"));
-    const child = spawn(process.execPath, [launcher, "start", "flip7"], {
-      env: {
-        ...process.env,
-        HOST: "127.0.0.1",
-        FLIP7_PORT: String(port),
-        FLIP7_DATA_FILE: join(dir, "rooms.json"),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let output = "";
-    child.stdout.on("data", (b) => {
-      output += b;
-    });
-    child.stderr.on("data", (b) => {
-      output += b;
-    });
-    const exited = once(child, "exit");
-    t.after(() => {
-      child.kill("SIGKILL");
-      rmSync(dir, { recursive: true, force: true });
-    });
-    let healthy = false;
-    for (let i = 0; i < 80; i++) {
-      try {
-        const r = await fetch(`http://127.0.0.1:${port}/api/health`, {
-          signal: AbortSignal.timeout(250),
-        });
-        healthy = r.ok;
-        if (healthy) break;
-      } catch {
-        /* starting */
+for (const game of ["flip7", "quoridor"])
+  test(
+    `one command launches ${game} on its configured port and stops its child`,
+    { timeout: 15000 },
+    async (t) => {
+      const reservation = createServer();
+      reservation.listen(0, "127.0.0.1");
+      await once(reservation, "listening");
+      const port = reservation.address().port;
+      await new Promise((r) => reservation.close(r));
+      const dir = mkdtempSync(join(tmpdir(), "labgames-launcher-"));
+      const child = spawn(process.execPath, [launcher, "start", game], {
+        env: {
+          ...process.env,
+          HOST: "127.0.0.1",
+          [`${game.toUpperCase()}_PORT`]: String(port),
+          FLIP7_DATA_FILE: join(dir, "rooms.json"),
+          QUORIDOR_DATA_FILE: join(dir, "rooms.json"),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      child.stdout.on("data", (b) => {
+        output += b;
+      });
+      child.stderr.on("data", (b) => {
+        output += b;
+      });
+      const exited = once(child, "exit");
+      t.after(() => {
+        child.kill("SIGKILL");
+        rmSync(dir, { recursive: true, force: true });
+      });
+      let healthy = false;
+      for (let i = 0; i < 80; i++) {
+        try {
+          const r = await fetch(`http://127.0.0.1:${port}/api/health`, {
+            signal: AbortSignal.timeout(250),
+          });
+          healthy = r.ok;
+          if (healthy) break;
+        } catch {
+          /* starting */
+        }
+        if (child.exitCode !== null) break;
+        await delay(50);
       }
-      if (child.exitCode !== null) break;
-      await delay(50);
-    }
-    assert.equal(healthy, true, output);
-    child.kill("SIGTERM");
-    const [code] = await exited;
-    assert.equal(code, 0, output);
-    await assert.rejects(
-      fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(300),
-      }),
-    );
-  },
-);
+      assert.equal(healthy, true, output);
+      child.kill("SIGTERM");
+      const [code] = await exited;
+      assert.equal(code, 0, output);
+      await assert.rejects(
+        fetch(`http://127.0.0.1:${port}/api/health`, {
+          signal: AbortSignal.timeout(300),
+        }),
+      );
+    },
+  );

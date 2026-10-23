@@ -9,7 +9,8 @@
   "workspaces": [
     "games/poker",
     "games/splendor",
-    "games/flip7"
+    "games/flip7",
+    "games/quoridor"
   ],
   "scripts": {
     "start": "node scripts/labgames.mjs start",

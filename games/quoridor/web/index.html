@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#181c20" />
+    <meta
+      name="description"
+      content="步步为营：支持两到四人的电脑、同屏和局域网对战。"
+    />
+    <title>步步为营 · LabGames</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="步步为营首页"
+        ><svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="3" y="3" width="26" height="26" rx="4" />
+          <path d="M12 6v20M21 6v20M6 12h20M6 21h20" />
+          <path class="mark-wall" d="M12 12h14" /></svg
+        ><span>步步为营<small>LabGames</small></span></a
+      >
+      <div class="header-actions">
+        <button class="text-button" id="rules-button">游戏规则</button
+        ><button class="outline-button" id="new-button">新建对局</button>
+      </div>
+    </header>
+    <main>
+      <nav class="mode-bar" aria-label="对局模式">
+        <div class="mode-tabs">
+          <button data-mode="solo" class="active">电脑对战</button
+          ><button data-mode="local">同屏对弈</button
+          ><button data-mode="online">好友联机</button>
+        </div>
+        <span id="match-meta" class="match-meta">2 人 · 每人 10 面墙</span>
+      </nav>
+      <div
+        id="connection-banner"
+        class="connection-banner"
+        role="status"
+        hidden
+      ></div>
+      <div class="game-layout">
+        <section class="board-section" aria-label="对弈棋盘">
+          <div class="board-heading">
+            <span id="board-caption"><i class="live-dot"></i> 对局中</span
+            ><span id="turn-count">第 1 回合</span>
+          </div>
+          <div id="goal-top" class="goal-label">你的终点</div>
+          <div class="board-wrap">
+            <svg
+              id="board"
+              viewBox="0 0 600 600"
+              role="group"
+              aria-label="九乘九棋盘"
+            ></svg>
+            <div id="lobby" class="lobby" hidden></div>
+          </div>
+          <div id="goal-bottom" class="goal-label bottom">对方终点</div>
+          <div class="board-bottom">
+            <span><i class="legend-dot"></i> 可走位置</span
+            ><button
+              id="path-button"
+              class="text-button small"
+              aria-pressed="false"
+            >
+              显示路线</button
+            ><span class="board-size">9 × 9</span>
+          </div>
+          <p id="board-tip" class="board-tip">点击棋盘上的亮点走子。</p>
+        </section>
+        <aside class="sidebar">
+          <section class="players-card">
+            <div class="section-label">
+              玩家<span id="mode-label">电脑对战</span>
+            </div>
+            <div id="players"></div>
+          </section>
+          <section class="action-card">
+            <div class="turn-heading">
+              <span id="turn-marker" class="turn-marker"></span>
+              <div>
+                <h2 id="turn-title">轮到你了</h2>
+                <p id="turn-subtitle">走子或放墙</p>
+              </div>
+              <div id="turn-clock" class="turn-clock" hidden>
+                <span id="clock-value">30</span
+                ><small id="clock-unit">秒</small>
+              </div>
+            </div>
+            <div id="clock-track" class="clock-track" hidden>
+              <span id="clock-progress"></span>
+            </div>
+            <p id="clock-rule" class="clock-rule" hidden></p>
+            <div class="action-tabs" role="group" aria-label="本回合行动">
+              <button id="move-button" class="active" aria-pressed="true">
+                走子 <kbd>M</kbd></button
+              ><button id="wall-button" aria-pressed="false">
+                放墙 <kbd>W</kbd>
+              </button>
+            </div>
+            <div id="move-help" class="move-help">
+              <svg viewBox="0 0 42 42" aria-hidden="true">
+                <path d="M21 33V9m-9 10 9-10 9 10" /></svg
+              ><span
+                >点击亮点走子<small>每回合走子或放墙，二选一。</small></span
+              >
+            </div>
+            <div id="wall-controls" hidden>
+              <div class="orientation-controls">
+                <button
+                  id="horizontal-button"
+                  aria-pressed="true"
+                  class="active"
+                >
+                  横墙</button
+                ><button id="vertical-button" aria-pressed="false">竖墙</button
+                ><button id="rotate-button" title="旋转围墙（R）">
+                  旋转 <kbd>R</kbd>
+                </button>
+              </div>
+              <p id="wall-help">选一个墙位，再确认放置。</p>
+              <button id="confirm-wall" class="primary-button" disabled>
+                确认放墙</button
+              ><button id="cancel-wall" class="text-button small">
+                取消选择
+              </button>
+            </div>
+            <div class="action-footer">
+              <button id="undo-button" class="text-button small">悔棋</button
+              ><span id="remaining-walls">剩余 10 面墙</span>
+            </div>
+          </section>
+          <section class="history-card">
+            <div class="section-label">
+              最近操作<span id="history-count">0 手</span>
+            </div>
+            <ol id="history"></ol>
+          </section>
+          <div class="keyboard-hint">
+            <kbd>M</kbd> 走子 <kbd>W</kbd> 放墙 <kbd>R</kbd> 旋转
+          </div>
+        </aside>
+      </div>
+      <footer>
+        <span>步步为营 · Quoridor</span><span>2–4 人 · 局域网对战</span>
+      </footer>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="setup-dialog" aria-labelledby="setup-title">
+      <form id="setup-form">
+        <button
+          type="button"
+          class="close-button"
+          data-close="setup-dialog"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+        <h2 id="setup-title">新建对局</h2>
+        <label
+          >对弈方式<select id="setup-mode">
+            <option value="solo">电脑对战</option>
+            <option value="local">同屏对弈</option>
+            <option value="online">局域网好友房</option>
+          </select></label
+        >
+        <label id="count-field"
+          >人数<select id="setup-count">
+            <option value="2">2 人 · 每人 10 面墙</option>
+            <option value="3">3 人 · 每人 6 面墙</option>
+            <option value="4">4 人 · 每人 5 面墙</option>
+          </select></label
+        >
+        <label id="difficulty-field"
+          >电脑难度<select id="setup-level">
+            <option value="standard">标准</option>
+            <option value="relaxed">轻松</option>
+          </select></label
+        >
+        <div id="online-fields" hidden>
+          <label
+            >昵称<input
+              id="player-name"
+              maxlength="16"
+              placeholder="输入昵称"
+              autocomplete="nickname" /></label
+          ><label
+            >房间码 <small>加入房间时填写；建房留空。</small
+            ><input
+              id="room-code"
+              maxlength="6"
+              placeholder="六位房间码"
+              autocomplete="off"
+              pattern="[a-fA-F0-9]{6}|^$" /></label
+          ><label id="timer-field"
+            >每步读秒<select id="setup-turn-seconds">
+              <option value="0">不限时</option>
+              <option value="10">10 秒</option>
+              <option value="20">20 秒</option>
+              <option value="30" selected>30 秒</option>
+              <option value="60">60 秒</option>
+              <option value="120">120 秒</option></select
+            ><small>超时自动走子。开局后不能修改。</small></label
+          >
+          <p class="field-hint">联机设备需连接同一局域网。</p>
+        </div>
+        <p id="setup-error" class="form-error" role="alert"></p>
+        <p class="field-hint" id="replace-warning">新局会替换当前本地对局。</p>
+        <button class="primary-button" id="setup-submit" type="submit">
+          开始
+        </button>
+      </form>
+    </dialog>
+    <dialog id="rules-dialog" aria-labelledby="rules-title">
+      <button class="close-button" data-close="rules-dialog" aria-label="关闭">
+        ×
+      </button>
+      <h2 id="rules-title">游戏规则</h2>
+      <div class="rule">
+        <b>1</b>
+        <div>
+          <h3>到达对岸获胜</h3>
+          <p>
+            从自己一侧的中点出发，先到达正对面一排的任意一格获胜。2 人各有 10
+            面墙，3 人各 6 面，4 人各 5 面。
+          </p>
+        </div>
+      </div>
+      <div class="rule">
+        <b>2</b>
+        <div>
+          <h3>每步走子或放墙</h3>
+          <p>
+            棋子上下左右移动一格。围墙横放或竖放，占两格长度；不能交叉、重叠，也不能封死任何人的全部通路。
+          </p>
+        </div>
+      </div>
+      <div class="rule">
+        <b>3</b>
+        <div>
+          <h3>相邻棋子可以跳过</h3>
+          <p>
+            相邻且中间无墙时，可以跳过一枚棋子。若它身后有墙、边界或另一棋子，可以向它的左右侧跳。不能连续跨过两枚棋子。
+          </p>
+        </div>
+      </div>
+      <div class="rule">
+        <b>4</b>
+        <div>
+          <h3>联机读秒</h3>
+          <p>
+            建房时可选择每步时限或不限时。超时后系统自动走一步，不消耗围墙；最后
+            5 秒会突出提示。房主可在准备室修改，开局后固定。
+          </p>
+        </div>
+      </div>
+      <p class="field-hint">
+        3
+        人为扩展玩法，使用下、左、上三侧。最短路线提示不计算跳子。只有电脑对战可以悔棋。
+      </p>
+      <p class="field-hint">
+        双人、四人玩法参考
+        <a
+          href="https://export.gigamic.com/wp-content/uploads/2021/01/INS-RULES-QUORIDOR_10-2016.pdf"
+          target="_blank"
+          rel="noreferrer"
+          >Gigamic 规则书</a
+        >，本项目为非官方实现。
+      </p>
+      <button id="rules-done" class="primary-button" data-close="rules-dialog">
+        返回
+      </button>
+    </dialog>
+    <dialog id="leave-dialog" aria-labelledby="leave-title">
+      <button class="close-button" data-close="leave-dialog" aria-label="关闭">
+        ×
+      </button>
+      <h2 id="leave-title">离开房间？</h2>
+      <p class="dialog-description">对局中的棋子将交由电脑接管。</p>
+      <button id="confirm-leave" class="primary-button">离开房间</button
+      ><button class="text-button" data-close="leave-dialog">继续对弈</button>
+    </dialog>
+    <dialog id="win-dialog" aria-labelledby="win-title">
+      <button
+        class="close-button"
+        data-close="win-dialog"
+        aria-label="查看棋盘"
+      >
+        ×
+      </button>
+      <div class="win-emblem" aria-hidden="true">✓</div>
+      <h2 id="win-title">对局结束</h2>
+      <p id="win-detail"></p>
+      <button id="play-again" class="primary-button">再来一局</button
+      ><button class="text-button" data-close="win-dialog">查看棋盘</button>
+    </dialog>
+    <noscript>启用 JavaScript 后即可游戏。</noscript>
+  </body>
+</html>

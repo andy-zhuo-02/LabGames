@@ -1,0 +1,45 @@
+name: Publish v0.1.0
+
+on:
+  push:
+    tags:
+      - v0.1.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-v0.1.0
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the tagged snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          gh api "repos/$GH_REPO/contents/docs/releases/v0.1.0.md?ref=$RELEASE_SHA" \
+            --jq '.content' | base64 --decode > "$notes"
+          test -s "$notes"
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; preserving it."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" \
+            --repo "$GH_REPO" \
+            --verify-tag \
+            --title "v0.1.0 · 步步为营" \
+            --notes-file "$notes" \
+            --latest

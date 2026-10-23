@@ -17,14 +17,15 @@
 | 德州扑克 | Node.js 原生 HTTP、JavaScript           | 原生 JavaScript | Node 内置 SQLite | Node 测试，包括旧引擎固定牌局对照 |
 | 璀璨宝石 | Node.js、TypeScript、Express、Socket.IO | React、Vite     | Node 内置 SQLite | Vitest、TypeScript、Vite          |
 | 七连翻   | Node.js 原生 HTTP/SSE、JavaScript       | 原生 JavaScript | JSON             | Node 测试                         |
+| 步步为营 | Node.js 原生 HTTP、JavaScript           | 原生 JavaScript / SVG | JSON + 浏览器本地存档 | Node 规则、电脑、房间与 HTTP 测试 |
 
 这些差异都属于 npm 管理的项目内部实现，不要求主机安装不同环境。
 
 ## 启动行为
 
-`npm start` 先构建璀璨宝石，再启动三项服务；任一服务意外退出，会停止本次启动的其他服务并报告错误。`Ctrl+C` 会请求各游戏保存并关闭，超时才强制结束。不会停止启动器之外的进程。
+`npm start` 先构建璀璨宝石，再启动四项服务；任一服务意外退出，会停止本次启动的其他服务并报告错误。`Ctrl+C` 会请求各游戏保存并关闭，超时才强制结束。不会停止启动器之外的进程。
 
-默认允许局域网访问，使用 `HOST=127.0.0.1` 可改为仅本机。用 `POKER_PORT`、`SPLENDOR_PORT`、`FLIP7_PORT` 分别指定端口，单个游戏也支持 `PORT`；不设置时沿用原端口 8765 / 3000 / 3007。
+默认允许局域网访问，使用 `HOST=127.0.0.1` 可改为仅本机。用 `POKER_PORT`、`SPLENDOR_PORT`、`FLIP7_PORT`、`QUORIDOR_PORT` 分别指定端口，单个游戏也支持 `PORT`；不设置时沿用端口 8765 / 3000 / 3007 / 3009。
 
 原有 shell 脚本仅转发到统一 npm 命令，Windows 直接使用 npm。各游戏的 `npm start` 也保留；在宝石目录直接启动前需执行 `npm run build`。
 
